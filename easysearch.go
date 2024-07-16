@@ -47,7 +47,6 @@ func main() {
 		}
 	}
 
-
 	// Continuously pop items off each source's queue and crawl them
 	go consumeQueue(db, config)
 

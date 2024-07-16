@@ -41,9 +41,9 @@ type Source struct {
 
 func readConfig() (*config, error) {
 
-	data, err := os.ReadFile("./config.yml");
+	data, err := os.ReadFile("./config.yml")
 	if err != nil {
-return nil, err
+		return nil, err
 	}
 
 	config := &config{}
