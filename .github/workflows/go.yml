@@ -27,7 +27,7 @@ jobs:
         run: go test -v .
 
       - name: Upload Artifact
-        uses: actions/upload-artifact
+        uses: actions/upload-artifact@v4
         with:
           - name: easysearch
             path: ./easysearch
