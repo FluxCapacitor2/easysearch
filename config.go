@@ -1,42 +1,10 @@
 package main
 
 import (
+	"os"
+
 	"gopkg.in/yaml.v3"
 )
-
-var data = `
-db:
-  driver: sqlite
-  connectionString: "./data2.db"
-  #connectionString: ":memory:"
-
-http:
-  listen: localhost
-  port: 8080
-
-sources:
-  - id: brendan
-    url: https://www.bswanson.dev
-    allowedDomains:
-      - "www.bswanson.dev"
-      - "webquiz.bswanson.dev"
-      - "favicon.bswanson.dev"
-      - "todo.bswanson.dev"
-    maxDepth: 100
-    speed: 30
-    refresh:
-      enabled: true
-      minAge: 7
-  - id: pitchlabs
-    url: https://www.pitchlabs.org
-    allowedDomains:
-      - "www.pitchlabs.org"
-    maxDepth: 50
-    speed: 60
-    refresh:
-      enabled: true
-      minAge: 7 # Refresh content weekly (every 7 days)
-`
 
 type config struct {
 	Http struct {
@@ -73,8 +41,13 @@ type Source struct {
 
 func readConfig() (*config, error) {
 
+	data, err := os.ReadFile("./config.yml");
+	if err != nil {
+return nil, err
+	}
+
 	config := &config{}
-	err := yaml.Unmarshal([]byte(data), config)
+	err = yaml.Unmarshal([]byte(data), config)
 
 	if err != nil {
 		return nil, err

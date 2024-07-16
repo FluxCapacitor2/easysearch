@@ -1,0 +1,29 @@
+# This is a sample config file.
+# Rename this file to `config.yml` and modify its contents.
+
+db:
+  driver: sqlite
+  connectionString: "./data.db" # Set this to ":memory:" to avoid creating a file
+
+http:
+  listen: localhost
+  port: 8080
+
+sources:
+  # Internally identify the site as `brendan`. All API requests will have to reference this ID.
+  - id: brendan
+    # Start crawling at this URL:
+    url: https://www.bswanson.dev
+    # Only allow crawling on these domains. Must include the domain of the base URL.
+    allowedDomains:
+      - "www.bswanson.dev"
+    # The maximum number of links the crawler will follow away from the base URL.
+    maxDepth: 100
+    # The amount of requests **per minute** that the crawler will make to your site:
+    speed: 30
+    refresh:
+      # Set `enabled` to `true` to recrawl old content after a certain amount of days.
+      enabled: true
+      # The minimum amount of time between refreshes, **in days**.
+      # In this example, pages are recrawled weekly.
+      minAge: 7
