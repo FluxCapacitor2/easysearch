@@ -158,9 +158,9 @@ func (db *SQLiteDatabase) search(sources []string, search string) ([]Result, err
 	query := fmt.Sprintf(`SELECT 
 			rank,
 			url,
-			highlight(pages_fts, 1, '<b>', '</b>') title,
-			snippet(pages_fts, 2, '<b>', '</b>', '…', 8) description,
-			snippet(pages_fts, 3, '<b>', '</b>', '…', 10) content
+			highlight(pages_fts, 2, '<b>', '</b>') title,
+			snippet(pages_fts, 3, '<b>', '</b>', '…', 8) description,
+			snippet(pages_fts, 4, '<b>', '</b>', '…', 10) content
 		FROM pages_fts WHERE source IN (%s) AND pages_fts MATCH ? ORDER BY rank;
 		`, strings.Repeat("?, ", len(sources)-1)+"?")
 
