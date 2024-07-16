@@ -7,8 +7,8 @@ RUN go mod download && go mod verify
 
 COPY . .
 
-RUN --mount=type=cache,target=/var/cache/go go env -w GOCACHE=/go-cache && \
-    go env -w GOMODCACHE=/gomod-cache && \
+RUN --mount=type=cache,target=/var/cache/go go env -w GOCACHE=/var/cache/go/build && \
+    go env -w GOMODCACHE=/var/cache/go/gomod && \
     CGO_ENABLED=1 go build -v --tags "fts5" -o /usr/local/bin/easysearch ./...
 
 FROM debian:bookworm-slim AS runner
