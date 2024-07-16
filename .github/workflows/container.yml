@@ -1,4 +1,4 @@
-name: ci
+name: Container
 
 on:
   push:
@@ -11,8 +11,11 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  docker:
+  publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
