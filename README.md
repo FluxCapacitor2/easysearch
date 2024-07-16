@@ -8,6 +8,8 @@ A simple way to add search to your website, featuring:
 - An API for search results
 - Multi-tenancy
 
+This project is built with [Go](https://go.dev/) and requires [CGo](https://go.dev/wiki/cgo) due to the [SQLite](https://www.sqlite.org/) [dependency](https://github.com/mattn/go-sqlite3).
+
 ## Why?
 
 I wanted to add a search function to my website. When I researched my available options, I found that:
@@ -36,22 +38,69 @@ This is a FOSS alternative to the aforementioned products that addresses my prim
 - [ ] Prebuilt components for React, Vue, Svelte, etc.
 - [ ] Exponential backoff for crawl errors
 
+## Configuration
+
+Easysearch requires a config file located at `./config.yml` in the current working directory.
+
+See the example in [config-sample.yml](https://github.com/FluxCapacitor2/easysearch/blob/main/config-sample.yml) for more information.
+
 ## Development
 
 1. Clone the repository:
 
-```
+```sh
 git clone https://github.com/FluxCapacitor2/easysearch
 ```
 
 2. Run the app locally:
 
-```
-go run .
-```
-
-When using SQLite, you will have to add a build tag to enable full-text search with the `fts5` extension:
-
-```
+```sh
 go run --tags="fts5" .
 ```
+
+<small>
+
+**Note**: When using SQLite, you have to add a build tag to enable full-text search with the [`fts5` extension](https://sqlite.org/fts5.html) (see [this section](https://github.com/mattn/go-sqlite3/tree/master?tab=readme-ov-file#feature--extension-list) of the `go-sqlite3` README for more info). That is why the `--tags="fts5"` flag is present. If you're only using Postgres, you can remove the flag for a slightly faster build.
+
+</small>
+
+## Building and Running an Executable
+
+You can build a binary with this command:
+
+```sh
+go build --tags "fts5" .
+```
+
+Then, you can run it like this:
+
+```sh
+$ ./easysearch
+```
+
+If you're on Windows, the file name would be `easysearch.exe`.
+
+## Building and Running with Docker
+
+You can build an Easysearch Docker image with this command:
+
+```sh
+docker build . -t ghcr.io/fluxcapacitor2/easysearch:test
+```
+
+Then, to run it, use this:
+
+```sh
+docker run -p 8080:8080 -v ./config.yml:/var/run/easysearch/config.yml ghcr.io/fluxcapacitor2/easysearch:test
+```
+
+**To use the latest version from the `main` branch of this repository**, you can run:
+
+```
+docker run -p 8080:8080 -v ./config.yml:/var/run/easysearch/config.yml ghcr.io/fluxcapacitor2/easysearch:main
+```
+
+This port-forwards port `8080` and mounts `config.yml` from your current working directory into the container.
+
+The image is built automatically with a GitHub Actions [workflow](https://github.com/FluxCapacitor2/easysearch/blob/main/.github/workflows/container.yml),
+so it's always up-to-date.
