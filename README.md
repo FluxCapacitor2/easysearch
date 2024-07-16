@@ -8,6 +8,21 @@ A simple way to add search to your website, featuring:
 - An API for search results
 - Multi-tenancy
 
+## Why?
+
+I wanted to add a search function to my website. When I researched my available options, I found that:
+
+- Google [Programmable Search Engine](https://programmablesearchengine.google.com/about/) (formerly Custom Search) wasn't customizable with the prebuilt widget and costs $5 per 1000 queries via the JSON API. It also only includes pages that are indexed by Google (obviously), so my results would be incomplete.
+- [Algolia](https://www.algolia.com/) is a fully-managed SaaS that you can't self-host. While its results are incredibly good, they could change their offerings or pricing model at any time. Also, crawling is an additional cost.
+- A custom search solution that uses my data would return the best quality results, but it takes time to build for each site and must be updated whenever my schema changes.
+
+This is a FOSS alternative to the aforementioned products that addresses my primary pain points. It's simple, runs anywhere, and lets you own your data.
+
+## Alternatives
+
+- If you have a static site, check out [Pagefind](https://pagefind.app/). It runs search on the client-side and builds an index whenever you generate your site.
+- For very small, personal sites, check out [Kagi Sidekick](https://sidekick.kagi.com/) when it launches.
+
 ## To-do list
 
 - [ ] Canonicalization
