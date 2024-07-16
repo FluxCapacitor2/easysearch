@@ -1,10 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
 	"net/url"
 	"slices"
 	"time"
@@ -51,41 +48,16 @@ func main() {
 	}
 
 	// Create an API server
-	http.Handle("/", new(httpHandler))
-	http.HandleFunc("/search", func(w http.ResponseWriter, req *http.Request) {
-		src := req.URL.Query()["source"]
-		q := req.URL.Query().Get("q")
-		if q != "" && src != nil && len(src) > 0 {
-			results, err := db.search(src, q)
-			if err != nil {
-				w.Write([]byte(fmt.Sprintf("Error searching!\n\n%v", err)))
-			} else {
-				json, err := json.Marshal(results)
-				if err == nil {
-					w.Header().Add("Content-Type", "application/json")
-					if len(results) == 0 {
-						// By default, marshalling an empty array results in `null`. Instead, return an empty results list.
-						w.Write([]byte(`{"success":"true","results":[]}`))
-					} else {
-						w.Write([]byte(fmt.Sprintf(`{"success":"true","results":%s}`, json)))
-					}
-				} else {
-					w.Write([]byte(fmt.Sprintf("Error formatting JSON: %v\n", err)))
-				}
-			}
-		} else {
-			w.WriteHeader(400)
-			w.Write([]byte(`{"success":"false","error": "Bad request"}`))
-		}
-	})
+	go serve(db, config.Http.Listen, config.Http.Port)
 
+	// Continuously pop items off each source's queue and crawl them
 	go consumeQueue(db, config)
-	go startCrawl(db, config)
-	go handleRefresh(db, config)
 
-	addr := fmt.Sprintf("%v:%v", config.Http.Listen, config.Http.Port)
-	fmt.Printf("Listening on http://%v\n", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	// If the base page for a source hasn't been crawled yet, queue it
+	go startCrawl(db, config)
+
+	// Refresh pages automatically after a certain amount of days
+	go handleRefresh(db, config)
 }
 
 func startCrawl(db Database, config *config) {

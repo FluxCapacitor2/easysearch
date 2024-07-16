@@ -22,6 +22,7 @@ This is a FOSS alternative to the aforementioned products that addresses my prim
 
 - If you have a static site, check out [Pagefind](https://pagefind.app/). It runs search on the client-side and builds an index whenever you generate your site.
 - For very small, personal sites, check out [Kagi Sidekick](https://sidekick.kagi.com/) when it launches.
+- If you're a nonprofit, school, or government agency, you can disable ads on your Google Programmable Search Engine. See [this article](https://support.google.com/programmable-search/answer/12423873) for more info.
 
 ## To-do list
 
