@@ -45,7 +45,8 @@ func (db *SQLiteDatabase) setup() error {
 			CREATE TABLE IF NOT EXISTS pages (
 				source TEXT NOT NULL,
 				url TEXT NOT NULL UNIQUE,
-				crawledAt DATETIME DEFAULT CURRENT_TIMESTAMP
+				crawledAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+				depth INTEGER NOT NULL
 			)
 		`)
 
@@ -75,7 +76,7 @@ func (db *SQLiteDatabase) setup() error {
 	return nil
 }
 
-func (db *SQLiteDatabase) addDocument(source string, url string, title string, description string, content string) (*Page, error) {
+func (db *SQLiteDatabase) addDocument(source string, depth int32, url string, title string, description string, content string) (*Page, error) {
 	tx, err := db.conn.Begin()
 
 	if err != nil {
@@ -99,7 +100,7 @@ func (db *SQLiteDatabase) addDocument(source string, url string, title string, d
 
 	// Insert new records for the page (to prevent duplicates and record crawl time as a DATETIME) and the FTS entry (for user search queries)
 	{
-		_, err := tx.Exec("INSERT INTO pages (source, url) VALUES (?, ?)", source, url)
+		_, err := tx.Exec("INSERT INTO pages (source, url, depth) VALUES (?, ?, ?)", source, url, depth)
 		if err != nil {
 			fmt.Printf("Error inserting new page: %v\n", err)
 			return nil, err
@@ -169,7 +170,7 @@ func (db *SQLiteDatabase) search(sources []string, search string) ([]Result, err
 		args[i] = src
 	}
 	// Add the search term at the end because there can be no more parameters after a `...`
-	args[len(args) - 1] = search
+	args[len(args)-1] = search
 
 	rows, err := db.conn.Query(query, args...)
 
@@ -202,13 +203,6 @@ func (db *SQLiteDatabase) addToQueue(source string, urls []string, depth int32) 
 	}
 
 	for _, url := range urls {
-		{
-			res, _ := db.hasDocument(source, url)
-			if res != nil && *res {
-				// The document has already been crawled!
-				continue
-			}
-		}
 		_, err := tx.Exec("REPLACE INTO crawl_queue (source, url, status, depth) VALUES (?, ?, ?, ?)", source, url, Pending, depth)
 		if err != nil {
 			return err
@@ -220,6 +214,7 @@ func (db *SQLiteDatabase) addToQueue(source string, urls []string, depth int32) 
 }
 
 func (db *SQLiteDatabase) updateQueueEntry(source string, url string, status QueueItemStatus) error {
+	// TODO: check for affected rows. if no rows were affected, then the update failed, potentially due to another instance updating the status at the same time.
 	_, err := db.conn.Exec("UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE source = ? AND url = ?", status, source, url)
 	return err
 }
@@ -263,7 +258,33 @@ func (db *SQLiteDatabase) cleanQueue() error {
 }
 
 func (db *SQLiteDatabase) queuePagesOlderThan(source string, daysAgo int32) error {
-	panic("Unimplemented")
+	rows, err := db.conn.Query("SELECT * FROM pages WHERE source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
+
+	if err != nil {
+		return err
+	}
+
+	for rows.Next() {
+
+		row := &Page{}
+
+		err := rows.Scan(&row.source, &row.url, &row.crawledAt, &row.depth)
+
+		if err != nil {
+			return err
+		}
+
+		{
+
+			err := db.addToQueue(source, []string{row.url}, row.depth)
+
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func createSQLiteDatabase(fileName string) (*SQLiteDatabase, error) {

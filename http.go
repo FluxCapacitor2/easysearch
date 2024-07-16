@@ -40,7 +40,6 @@ func serve(db Database, hostname string, port int16) {
 		}
 	})
 
-
 	addr := fmt.Sprintf("%v:%v", hostname, port)
 	fmt.Printf("Listening on http://%v\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))

@@ -1,2 +1,4 @@
-data.db*
+*.db
+*.db-shm
+*.db-wal
 .env*

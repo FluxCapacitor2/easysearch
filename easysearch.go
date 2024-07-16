@@ -47,8 +47,6 @@ func main() {
 		}
 	}
 
-	// Create an API server
-	go serve(db, config.Http.Listen, config.Http.Port)
 
 	// Continuously pop items off each source's queue and crawl them
 	go consumeQueue(db, config)
@@ -58,6 +56,9 @@ func main() {
 
 	// Refresh pages automatically after a certain amount of days
 	go handleRefresh(db, config)
+
+	// Create an API server
+	serve(db, config.Http.Listen, config.Http.Port)
 }
 
 func startCrawl(db Database, config *config) {
@@ -113,7 +114,7 @@ func consumeQueue(db Database, config *config) {
 					}
 				}
 				// The `item` is nil when there are no items in the queue
-				urls, err := crawl(src, db, item.url)
+				urls, err := crawl(src, item.depth, db, item.url)
 
 				if err != nil {
 					fmt.Printf("Error crawling URL %v from source %v: %v\n", item.url, src.Id, err)
@@ -137,6 +138,13 @@ func consumeQueue(db Database, config *config) {
 						if err != nil {
 							fmt.Printf("%v\n", err)
 						} else {
+
+							crawled, err := db.hasDocument(src.Id, fullUrl)
+
+							if err == nil && *crawled {
+								continue
+							}
+
 							if slices.Contains(src.AllowedDomains, res.Hostname()) {
 								filtered = append(filtered, fullUrl)
 							}

@@ -12,7 +12,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-func crawl(source Source, db Database, pageUrl string) ([]string, error) {
+func crawl(source Source, currentDepth int32, db Database, pageUrl string) ([]string, error) {
 
 	// Parse the URL, canonicalize it, and convert it back into a string for later use
 	orig, err := url.Parse(pageUrl)
@@ -45,9 +45,9 @@ func crawl(source Source, db Database, pageUrl string) ([]string, error) {
 			for _, item := range element.DOM.Nodes {
 				content += getText(item)
 			}
-			_, err = db.addDocument(source.Id, pageUrl, title, description, content)
+			_, err = db.addDocument(source.Id, currentDepth, pageUrl, title, description, content)
 		} else {
-			_, err = db.addDocument(source.Id, pageUrl, article.Title, description, article.TextContent)
+			_, err = db.addDocument(source.Id, currentDepth, pageUrl, article.Title, description, article.TextContent)
 		}
 
 		if err != nil {

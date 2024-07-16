@@ -7,7 +7,7 @@ import (
 var data = `
 db:
   driver: sqlite
-  connectionString: "./data.db"
+  connectionString: "./data2.db"
   #connectionString: ":memory:"
 
 http:

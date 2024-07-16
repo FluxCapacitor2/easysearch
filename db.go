@@ -4,7 +4,7 @@ type Database interface {
 	// Create necessary tables
 	setup() error
 	// Add a page to the search index.
-	addDocument(source string, url string, title string, description string, content string) (*Page, error)
+	addDocument(source string, depth int32, url string, title string, description string, content string) (*Page, error)
 	// Returns whether the given URL is indexed
 	hasDocument(source string, url string) (*bool, error)
 	// Run a fulltext search with the given query
@@ -27,6 +27,8 @@ type Page struct {
 	title       string
 	description string
 	content     string
+	depth       int32
+	crawledAt   string
 }
 
 type Result struct {
