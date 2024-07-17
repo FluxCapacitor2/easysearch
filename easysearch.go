@@ -9,6 +9,8 @@ import (
 	"github.com/go-co-op/gocron/v2"
 )
 
+// TODO: look into dependency injection instead of passing the DB and config into every function call
+
 func main() {
 
 	// Load configuration
@@ -76,8 +78,12 @@ func startCrawl(db Database, config *config) {
 				if err != nil {
 					fmt.Printf("Failed to parse start URL for source %v (%v): %v\n", src.Id, src.Url, err)
 				} else {
-					formatted := canonicalize(parsed).String()
-					err := db.addToQueue(src.Id, []string{formatted}, 0)
+					canonical, err := canonicalize(src.Id, db, parsed)
+					if err != nil {
+						fmt.Printf("Failed to find canonical URL for page %v: %v\n", parsed.String(), err)
+						continue
+					}
+					err = db.addToQueue(src.Id, []string{canonical.String()}, 0)
 					if err != nil {
 						fmt.Printf("Failed to add page %v to queue: %v\n", src.Url, err)
 					}
@@ -113,15 +119,27 @@ func consumeQueue(db Database, config *config) {
 					}
 				}
 				// The `item` is nil when there are no items in the queue
-				urls, err := crawl(src, item.depth, db, item.url)
+				result, err := crawl(src, item.depth, db, item.url)
 
 				if err != nil {
 					fmt.Printf("Error crawling URL %v from source %v: %v\n", item.url, src.Id, err)
-					err := db.updateQueueEntry(src.Id, item.url, Error)
-					if err != nil {
-						fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.url, Error, err)
+					{
+						err := db.updateQueueEntry(src.Id, item.url, Error)
+						if err != nil {
+							fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.url, Error, err)
+						}
 					}
+
+					// Add an entry to the pages table to prevent immediately recrawling the same URL when referred from other sources
+					if result != nil {
+						_, err := db.addDocument(src.Id, item.depth, result.canonical, Error, "", "", "")
+						if err != nil {
+							fmt.Printf("Failed to add page in 'error' state: %v\n", err)
+						}
+					}
+
 				} else {
+					// fmt.Printf("Crawl complete: %+v\n", result)
 					err := db.updateQueueEntry(src.Id, item.url, Finished)
 					if err != nil {
 						fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.url, Finished, err)
@@ -132,7 +150,7 @@ func consumeQueue(db Database, config *config) {
 
 					filtered := []string{}
 
-					for _, fullUrl := range urls {
+					for _, fullUrl := range result.urls {
 						res, err := url.Parse(fullUrl)
 						if err != nil {
 							fmt.Printf("%v\n", err)
@@ -166,7 +184,7 @@ func consumeQueue(db Database, config *config) {
 	}
 
 	{
-		_, err := scheduler.NewJob(gocron.DurationJob(time.Duration(1*time.Hour)), gocron.NewTask(func() {
+		_, err := scheduler.NewJob(gocron.DurationJob(time.Duration(5*time.Minute)), gocron.NewTask(func() {
 			err := db.cleanQueue()
 			if err != nil {
 				fmt.Printf("Error cleaning queue: %v\n", err)

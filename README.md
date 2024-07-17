@@ -28,7 +28,7 @@ This is a FOSS alternative to the aforementioned products that addresses my prim
 
 ## To-do list
 
-- [ ] Canonicalization
+- [x] Basic canonicalization
 - [ ] Build a common representation of query features (like AND, OR, exact matches, negation, fuzzy matches) and using it to build queries for the user's database driver
 - [x] Implementing something like Readability (or at least removing the contents of non-text resources)
 - [ ] SPA support using a headless browser
@@ -37,6 +37,9 @@ This is a FOSS alternative to the aforementioned products that addresses my prim
 - [ ] MySQL support
 - [ ] Prebuilt components for React, Vue, Svelte, etc.
 - [ ] Exponential backoff for crawl errors
+- [ ] Vector search?
+- [ ] Generating and indexing transcripts of video and audio recordings?
+- [ ] Image search?
 
 ## Configuration
 

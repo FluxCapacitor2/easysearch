@@ -24,6 +24,8 @@ func (db *SQLiteDatabase) setup() error {
 		}
 	}
 
+	// TODO: use a composite index on the `source` AND `url` column instead of making `url` globally unique
+
 	{
 		_, err := db.conn.Exec(`
 			CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5 (
@@ -31,7 +33,8 @@ func (db *SQLiteDatabase) setup() error {
 				url,
 				title,
 				description,
-				content
+				content,
+				status UNINDEXED
 			)
 		`)
 
@@ -46,7 +49,8 @@ func (db *SQLiteDatabase) setup() error {
 				source TEXT NOT NULL,
 				url TEXT NOT NULL UNIQUE,
 				crawledAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-				depth INTEGER NOT NULL
+				depth INTEGER NOT NULL,
+				status INTEGER NOT NULL
 			)
 		`)
 
@@ -61,7 +65,7 @@ func (db *SQLiteDatabase) setup() error {
 			CREATE TABLE IF NOT EXISTS crawl_queue (
 				source TEXT NOT NULL,
 				url TEXT NOT NULL UNIQUE,
-				status INTEGER,
+				status INTEGER DEFAULT 0,
 				depth INTEGER,
 				addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
 				updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -73,10 +77,25 @@ func (db *SQLiteDatabase) setup() error {
 		}
 	}
 
+	{
+		_, err := db.conn.Exec(`
+			CREATE TABLE IF NOT EXISTS canonicals (
+			  source TEXT NOT NULL,
+			  url TEXT NOT NULL UNIQUE,
+			  canonical TEXT NOT NULL,
+			  crawledAt DATETIME DEFAULT CURRENT_TIMESTAMP
+			)
+		`)
+
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-func (db *SQLiteDatabase) addDocument(source string, depth int32, url string, title string, description string, content string) (*Page, error) {
+func (db *SQLiteDatabase) addDocument(source string, depth int32, url string, status QueueItemStatus, title string, description string, content string) (*Page, error) {
 	tx, err := db.conn.Begin()
 
 	if err != nil {
@@ -87,10 +106,10 @@ func (db *SQLiteDatabase) addDocument(source string, depth int32, url string, ti
 	// Remove old entries
 	{
 		_, err := tx.Exec(`
-		DELETE FROM crawl_queue WHERE url = ?;
-		DELETE FROM pages WHERE url = ?;
-		DELETE FROM pages_fts WHERE url = ?;
-		`, url, url, url)
+		DELETE FROM crawl_queue WHERE source = ? AND url = ?;
+		DELETE FROM pages WHERE source = ? AND url = ?;
+		DELETE FROM pages_fts WHERE source = ? AND url = ?;
+		`, source, url, source, url, source, url)
 
 		if err != nil {
 			fmt.Printf("Error removing old entries: %v\n", err)
@@ -100,20 +119,20 @@ func (db *SQLiteDatabase) addDocument(source string, depth int32, url string, ti
 
 	// Insert new records for the page (to prevent duplicates and record crawl time as a DATETIME) and the FTS entry (for user search queries)
 	{
-		_, err := tx.Exec("INSERT INTO pages (source, url, depth) VALUES (?, ?, ?)", source, url, depth)
+		_, err := tx.Exec("INSERT INTO pages (source, url, depth, status) VALUES (?, ?, ?, ?)", source, url, depth, status)
 		if err != nil {
 			fmt.Printf("Error inserting new page: %v\n", err)
 			return nil, err
 		}
 	}
 
-	result := tx.QueryRow("INSERT INTO pages_fts (source, url, title, description, content) VALUES (?, ?, ?, ?, ?) RETURNING *", source, url, title, description, content)
+	result := tx.QueryRow("INSERT INTO pages_fts (source, url, title, description, content, status) VALUES (?, ?, ?, ?, ?, ?) RETURNING *", source, url, title, description, content, status)
 
 	// Return the newly-inserted row
 	row := &Page{}
 
 	{
-		err := result.Scan(&row.source, &row.url, &row.title, &row.description, &row.content)
+		err := result.Scan(&row.source, &row.url, &row.title, &row.description, &row.content, &row.status)
 
 		if err != nil {
 			fmt.Printf("Error scanning inserted row: %v\n", err)
@@ -133,7 +152,7 @@ func (db *SQLiteDatabase) addDocument(source string, depth int32, url string, ti
 }
 
 func (db *SQLiteDatabase) hasDocument(source string, url string) (*bool, error) {
-	cursor := db.conn.QueryRow("SELECT url FROM pages WHERE source = ? AND url = ?", source, url)
+	cursor := db.conn.QueryRow("SELECT url FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?))", source, url, url)
 
 	page := &Page{}
 	err := cursor.Scan(&page.url)
@@ -161,15 +180,16 @@ func (db *SQLiteDatabase) search(sources []string, search string) ([]Result, err
 			highlight(pages_fts, 2, '<b>', '</b>') title,
 			snippet(pages_fts, 3, '<b>', '</b>', '…', 8) description,
 			snippet(pages_fts, 4, '<b>', '</b>', '…', 10) content
-		FROM pages_fts WHERE source IN (%s) AND pages_fts MATCH ? ORDER BY rank;
+		FROM pages_fts WHERE source IN (%s) AND status = ? AND pages_fts MATCH ? ORDER BY rank;
 		`, strings.Repeat("?, ", len(sources)-1)+"?")
 
 	// Convert the sources (a []string) into a slice of type []any by manually copying each element
-	var args []any = make([]any, len(sources)+1)
+	var args []any = make([]any, len(sources)+2)
 	for i, src := range sources {
 		args[i] = src
 	}
-	// Add the search term at the end because there can be no more parameters after a `...`
+	// Add the required status and search term at the end because there can be no more parameters after a `...`
+	args[len(args)-2] = Finished // (as opposed to the Error state)
 	args[len(args)-1] = search
 
 	rows, err := db.conn.Query(query, args...)
@@ -203,8 +223,12 @@ func (db *SQLiteDatabase) addToQueue(source string, urls []string, depth int32) 
 	}
 
 	for _, url := range urls {
-		_, err := tx.Exec("REPLACE INTO crawl_queue (source, url, status, depth) VALUES (?, ?, ?, ?)", source, url, Pending, depth)
+		_, err := tx.Exec("REPLACE INTO crawl_queue (source, url, depth) VALUES (?, ?, ?)", source, url, depth)
 		if err != nil {
+			rbErr := tx.Rollback()
+			if rbErr != nil {
+				return rbErr
+			}
 			return err
 		}
 	}
@@ -285,6 +309,23 @@ func (db *SQLiteDatabase) queuePagesOlderThan(source string, daysAgo int32) erro
 	}
 
 	return nil
+}
+
+func (db *SQLiteDatabase) getCanonical(source string, url string) (*Canonical, error) {
+	cursor := db.conn.QueryRow("SELECT * FROM canonicals WHERE source = ? AND url = ?", source, url)
+
+	canonical := &Canonical{}
+	err := cursor.Scan(&canonical.url, &canonical.canonical, &canonical.crawledAt)
+
+	if err != nil {
+		return nil, err
+	}
+	return canonical, nil
+}
+
+func (db *SQLiteDatabase) setCanonical(source string, url string, canonical string) error {
+	_, err := db.conn.Exec("REPLACE INTO canonicals (source, url, canonical) VALUES (?, ?, ?)", source, url, canonical)
+	return err
 }
 
 func createSQLiteDatabase(fileName string) (*SQLiteDatabase, error) {
