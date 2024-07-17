@@ -40,10 +40,15 @@ type Page struct {
 
 type Result struct {
 	Url         string  `json:"url"`
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	Match       string  `json:"content"`
+	Title       []Match `json:"title"`
+	Description []Match `json:"description"`
+	Content     []Match `json:"content"`
 	Rank        float64 `json:"rank"`
+}
+
+type Match struct {
+	Highlighted bool   `json:"highlighted"`
+	Content     string `json:"content"`
 }
 
 type QueueItemStatus int8

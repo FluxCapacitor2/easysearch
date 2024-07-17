@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -152,6 +153,7 @@ func (db *SQLiteDatabase) addDocument(source string, depth int32, url string, st
 }
 
 func (db *SQLiteDatabase) hasDocument(source string, url string) (*bool, error) {
+	// TODO: SELECTing the URL is unnecessary. we can just use a "SELECT 1" and see if any rows were returned.
 	cursor := db.conn.QueryRow("SELECT url FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?))", source, url, url)
 
 	page := &Page{}
@@ -170,27 +172,42 @@ func (db *SQLiteDatabase) hasDocument(source string, url string) (*bool, error) 
 	return &exists, nil
 }
 
+type RawResult struct {
+	Rank        float64
+	Url         string
+	Title       string
+	Description string
+	Content     string
+}
+
 func (db *SQLiteDatabase) search(sources []string, search string) ([]Result, error) {
 
-	// TODO: instead of using <b>bold</b> to surround matches, create a unique token that doesn't appear in the data.
-	//       Then, when the query returns results, convert them into a structured representation that includes the highlighted content.
+	start := uuid.New().String()
+	end := uuid.New().String()
+
 	query := fmt.Sprintf(`SELECT 
 			rank,
 			url,
-			highlight(pages_fts, 2, '<b>', '</b>') title,
-			snippet(pages_fts, 3, '<b>', '</b>', '…', 8) description,
-			snippet(pages_fts, 4, '<b>', '</b>', '…', 10) content
+			highlight(pages_fts, 2, ?, ?) title,
+			snippet(pages_fts, 3, ?, ?, '…', 8) description,
+			snippet(pages_fts, 4, ?, ?, '…', 10) content
 		FROM pages_fts WHERE source IN (%s) AND status = ? AND pages_fts MATCH ? ORDER BY rank;
 		`, strings.Repeat("?, ", len(sources)-1)+"?")
 
 	// Convert the sources (a []string) into a slice of type []any by manually copying each element
-	var args []any = make([]any, len(sources)+2)
-	for i, src := range sources {
-		args[i] = src
+	var args []any = make([]any, 0, len(sources)+8)
+
+	// The "start" and "end" tokens are used to highlight search results. They're used in the `highlight` and `snippet` functions in the query.
+	args = append(args, start, end, start, end, start, end)
+
+	for _, src := range sources {
+		args = append(args, src)
 	}
-	// Add the required status and search term at the end because there can be no more parameters after a `...`
-	args[len(args)-2] = Finished // (as opposed to the Error state)
-	args[len(args)-1] = search
+
+	// Add the required status and search term as parameters
+	args = append(args,
+		Finished, // (as opposed to the Error or Unindexable states)
+		search)
 
 	rows, err := db.conn.Query(query, args...)
 
@@ -201,15 +218,68 @@ func (db *SQLiteDatabase) search(sources []string, search string) ([]Result, err
 	var results []Result
 
 	for rows.Next() {
-		item := &Result{}
-		err := rows.Scan(&item.Rank, &item.Url, &item.Title, &item.Description, &item.Match)
+		item := &RawResult{}
+		err := rows.Scan(&item.Rank, &item.Url, &item.Title, &item.Description, &item.Content)
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, *item)
+
+		// Process the result to convert strings into `Match` instances
+		res := &Result{
+			Rank:        item.Rank,
+			Url:         item.Url,
+			Title:       processResult(item.Title, start, end),
+			Description: processResult(item.Description, start, end),
+			Content:     processResult(item.Content, start, end),
+		}
+
+		results = append(results, *res)
 	}
 
 	return results, nil
+}
+
+// SQLite FTS5 queries support a `highlight` function which surrounds exact matches with strings.
+// This function converts the string representation into a struct so that the caller does not have to perform any manual parsing.
+func processResult(input string, start string, end string) []Match {
+
+	// Any text between `start` and `end` should be a Match with `highlighted` = true.
+	// Any other text should be a Match with `highlighted` = false.
+
+	var matches = make([]Match, 0, 3)
+
+	for {
+		startIndex := strings.Index(input, start)
+
+		if len(input) == 0 {
+			// Prevent adding an empty match at the end of the list
+			return matches
+		}
+
+		if startIndex == -1 {
+			// `start` wasn't found in the string. Return the entire thing as a nonhighlighted Match.
+			matches = append(matches, Match{Highlighted: false, Content: input})
+			return matches
+		}
+
+		if startIndex > 0 {
+			// `start` was found after the beginning of the string.
+			matches = append(matches, Match{Highlighted: false, Content: input[0:startIndex]})
+			// Trim off the beginning part that we just added as a Match
+			input = input[startIndex:]
+			continue
+		}
+
+		endIndex := strings.Index(input, end)
+
+		if endIndex == -1 {
+			// Malformed input; bail
+			return matches
+		}
+
+		matches = append(matches, Match{Highlighted: true, Content: input[startIndex+len(start) : endIndex]})
+		input = input[endIndex+len(end):]
+	}
 }
 
 func (db *SQLiteDatabase) addToQueue(source string, urls []string, depth int32) error {

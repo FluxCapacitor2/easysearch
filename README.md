@@ -120,7 +120,7 @@ To get search results, make a GET request to the `/search` endpoint with the fol
 For example:
 
 ```
-GET http://localhost:8080/search?source=brendan&q=favicon
+GET http://localhost:8080/search?source=brendan&q=typescript
 ```
 
 The response is returned as a JSON object.
@@ -130,20 +130,23 @@ The response is returned as a JSON object.
   "success": "true",
   "results": [
     {
-      "url": "https://favicon.bswanson.dev",
-      "title": "\u003cb\u003eFavicon\u003c/b\u003e Generator",
-      "description": "Upload an image and get a small set…",
-      "content": "\u003cb\u003eFavicon\u003c/b\u003e GeneratorUpload an SVG and instantly create the necessary sizes…",
-      "rank": -7.7715635636819576
-    },
-    {
-      "url": "https://www.bswanson.dev/projects/favicon-generator/",
-      "title": "\u003cb\u003eFavicon\u003c/b\u003e Generator",
-      "description": "A web app that generates a set of…",
-      "content": "Brendan Swanson              \u003cb\u003eFavicon\u003c/b\u003e Generator  A web app that generates a…",
-      "rank": -7.733445388464838
-    },
-    ...
+      "url": "https://www.bswanson.dev/blog/nextauth-oauth-passing-errors-to-the-client/",
+      "title": [
+        {
+          "highlighted": false,
+          "content": "Passing user-friendly NextAuth v5 error messages to the client"
+        }
+      ],
+      "description": [
+        { "highlighted": false, "content": "In Auth.js v5, you can only pass…" }
+      ],
+      "content": [
+        { "highlighted": false, "content": "…First, if you’re using " },
+        { "highlighted": true, "content": "TypeScript" },
+        { "highlighted": false, "content": ", augment the JWT and…" }
+      ],
+      "rank": -3.657958588047788
+    }
   ]
 }
 ```
@@ -153,6 +156,8 @@ The response is returned as a JSON object.
 - `description`: A snippet of the page's meta description, taken from the `<meta name="description">` HTML tag
 - `content`: A snippet of the page's text content. Text is parsed using [go-readability](https://github.com/go-shiori/go-readability) by default. If Readability doesn't find an article, text is taken from all elements except those on [this list](https://github.com/FluxCapacitor2/easysearch/blob/97ac9963390ab7bce2f886a60033e2e4dfda08cd/crawler.go#L168).
 - `rank`: The relative ranking of the item. **Lower numbers indicate greater relevance** to the search query.
+
+`title`, `description`, and `content` are arrays. If an item is `highlighted`, then it directly matches the query. This allows you to bold relevant keywords in search results when building a user interface.
 
 If there was an error processing the request, the response will look like this:
 
