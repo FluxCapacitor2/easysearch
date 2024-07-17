@@ -10,16 +10,19 @@ import (
 func serve(db Database, hostname string, port int16) {
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Add("X-Robots-Tag", "noindex")
-		w.Write([]byte("Easysearch, an open-source project by FluxCapacitor2"))
+		w.Write([]byte("Easysearch, an open-source project by FluxCapacitor2."))
 	})
 
 	http.HandleFunc("/search", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Add("X-Robots-Tag", "noindex")
 		src := req.URL.Query()["source"]
 		q := req.URL.Query().Get("q")
 		if q != "" && src != nil && len(src) > 0 {
 			results, err := db.search(src, q)
 			if err != nil {
-				w.Write([]byte(fmt.Sprintf("Error searching!\n\n%v", err)))
+				w.WriteHeader(500)
+				w.Write([]byte(`{"success":"false","error": "Internal server error"}`))
+				fmt.Printf("Error generating search results: %v\n", err)
 			} else {
 				json, err := json.Marshal(results)
 				if err == nil {
@@ -31,7 +34,9 @@ func serve(db Database, hostname string, port int16) {
 						w.Write([]byte(fmt.Sprintf(`{"success":"true","results":%s}`, json)))
 					}
 				} else {
-					w.Write([]byte(fmt.Sprintf("Error formatting JSON: %v\n", err)))
+					w.WriteHeader(500)
+					w.Write([]byte(`{"success":"false","error": "Internal server error"}`))
+					fmt.Printf("Error marshalling JSON while returning search results: %v\n", err)
 				}
 			}
 		} else {

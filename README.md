@@ -107,3 +107,58 @@ This port-forwards port `8080` and mounts `config.yml` from your current working
 
 The image is built automatically with a GitHub Actions [workflow](https://github.com/FluxCapacitor2/easysearch/blob/main/.github/workflows/container.yml),
 so it's always up-to-date.
+
+## Search Results API
+
+When you start up Easysearch, the API server address is printed to the process's standard output.
+
+To get search results, make a GET request to the `/search` endpoint with the following URL parameters:
+
+- **`source`**: The ID of your search source. This must match the value of one of the `id` properties in your `config.yml` file.
+- **`q`**: Your search query.
+
+For example:
+
+```
+GET http://localhost:8080/search?source=brendan&q=favicon
+```
+
+The response is returned as a JSON object.
+
+```json
+{
+  "success": "true",
+  "results": [
+    {
+      "url": "https://favicon.bswanson.dev",
+      "title": "\u003cb\u003eFavicon\u003c/b\u003e Generator",
+      "description": "Upload an image and get a small set…",
+      "content": "\u003cb\u003eFavicon\u003c/b\u003e GeneratorUpload an SVG and instantly create the necessary sizes…",
+      "rank": -7.7715635636819576
+    },
+    {
+      "url": "https://www.bswanson.dev/projects/favicon-generator/",
+      "title": "\u003cb\u003eFavicon\u003c/b\u003e Generator",
+      "description": "A web app that generates a set of…",
+      "content": "Brendan Swanson              \u003cb\u003eFavicon\u003c/b\u003e Generator  A web app that generates a…",
+      "rank": -7.733445388464838
+    },
+    ...
+  ]
+}
+```
+
+- `url`: The canonical URL of the matching page
+- `title`: A snippet of the page title, taken from the `<title>` HTML tag
+- `description`: A snippet of the page's meta description, taken from the `<meta name="description">` HTML tag
+- `content`: A snippet of the page's text content. Text is parsed using [go-readability](https://github.com/go-shiori/go-readability) by default. If Readability doesn't find an article, text is taken from all elements except those on [this list](https://github.com/FluxCapacitor2/easysearch/blob/97ac9963390ab7bce2f886a60033e2e4dfda08cd/crawler.go#L168).
+- `rank`: The relative ranking of the item. **Lower numbers indicate greater relevance** to the search query.
+
+If there was an error processing the request, the response will look like this:
+
+```json
+{ "success": "false", "error": "Internal server error" }
+```
+
+Error messages are intentionally vague to obscure details about your environment or database schema.
+However, full errors are printed to the process's standard output.
