@@ -182,10 +182,10 @@ func getText(node *html.Node) string {
 	}
 
 	if node.NextSibling != nil {
-		text += getText(node.NextSibling)
+		text += getText(node.NextSibling) + " "
 	}
 
-	return text
+	return strings.TrimSpace(text)
 }
 
 // Format URLs to keep them as consistent as possible
