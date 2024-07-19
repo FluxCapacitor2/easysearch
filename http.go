@@ -147,9 +147,10 @@ func renderTemplateWithResults(db Database, config *config, req *http.Request, w
 			return
 		}
 	} else {
-		// Bad request
-		w.WriteHeader(400)
-		return
+		results = make([]Result, 0)
+		t := uint32(0)
+		total = &t
+		totalTime = 0
 	}
 
 	sources := make([]togglableSource, 0, len(config.Sources))

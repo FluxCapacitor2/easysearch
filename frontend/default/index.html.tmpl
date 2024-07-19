@@ -51,7 +51,7 @@
 
 
     <p class="count">{{ .Total }} results found in {{ .Time }}s.</p>
-  {{ else }}
+  {{ else if .Query }}
     No results found.
   {{ end }}
 {{ end }}
