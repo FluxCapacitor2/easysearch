@@ -185,7 +185,7 @@ The response is returned as a JSON object.
 If there was an error processing the request, the response will look like this:
 
 ```json
-{ "success": "false", "error": "Internal server error" }
+{ "success": false, "error": "Internal server error" }
 ```
 
 Error messages are intentionally vague to obscure details about your environment or database schema.

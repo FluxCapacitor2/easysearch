@@ -90,6 +90,15 @@ func crawl(source Source, currentDepth int32, db Database, pageUrl string) (*Cra
 
 		title := strings.TrimSpace(element.DOM.Find("title").Text())
 
+		{
+			// If we can parse the Readability output as HTML, get the text content using our method.
+			// This will add spaces between HTML elements.
+			node, err := html.Parse(strings.NewReader(article.Content))
+			if err == nil {
+				article.TextContent = getText(node)
+			}
+		}
+
 		if err != nil || article.TextContent == "" {
 			// Readability couldn't parse the document. Instead,
 			// use a simpler heuristic to find text content.
@@ -178,12 +187,11 @@ func getText(node *html.Node) string {
 
 	if node.FirstChild != nil {
 		if !slices.Contains(nonTextElements, node.Data) {
-			text += getText(node.FirstChild)
+			text += getText(node.FirstChild) + " "
 		}
 	}
 
 	if node.Type == html.TextNode {
-		fmt.Println(node.Data)
 		text += node.Data + " "
 	}
 
