@@ -206,11 +206,12 @@ func renderTemplateWithResults(db Database, config *config, req *http.Request, w
 }
 
 type httpResponse struct {
-	status     int16
-	Success    bool           `json:"success"`
-	Error      string         `json:"error"`
-	Results    []Result       `json:"results"`
-	Pagination paginationInfo `json:"pagination"`
+	status       int16
+	Success      bool           `json:"success"`
+	Error        string         `json:"error,omitempty"`
+	Results      []Result       `json:"results"`
+	Pagination   paginationInfo `json:"pagination"`
+	ResponseTime float64        `json:"responseTime"`
 }
 
 type paginationInfo struct {
@@ -249,7 +250,7 @@ func serve(db Database, config *config) {
 	}
 
 	http.HandleFunc("/api/search", func(w http.ResponseWriter, req *http.Request) {
-
+		timeStart := time.Now().UnixMicro()
 		var response *httpResponse
 
 		src := req.URL.Query()["source"]
@@ -288,6 +289,7 @@ func serve(db Database, config *config) {
 
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(int(response.status))
+		response.ResponseTime = float64(time.Now().UnixMicro()-timeStart) / 1e6
 		str, err := json.Marshal(response)
 		if err != nil {
 			w.Write([]byte(`{"success":"false","error":"Failed to marshal struct into JSON"}`))

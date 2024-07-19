@@ -139,7 +139,7 @@ The response is returned as a JSON object.
 
 ```json
 {
-  "success": "true",
+  "success": true,
   "results": [
     {
       "url": "https://www.bswanson.dev/blog/nextauth-oauth-passing-errors-to-the-client/",
@@ -155,19 +155,30 @@ The response is returned as a JSON object.
       "content": [
         { "highlighted": false, "content": "…First, if you’re using " },
         { "highlighted": true, "content": "TypeScript" },
-        { "highlighted": false, "content": ", augment the JWT and…" }
+        {
+          "highlighted": false,
+          "content": ", augment the JWT and Session interfaces:\nsrc/auth.ts// This can be anything, just make sure the same…"
+        }
       ],
       "rank": -3.657958588047788
     }
-  ]
+  ],
+  "pagination": { "page": 1, "pageSize": 10, "total": 1 },
+  "responseTime": 0.000778
 }
 ```
 
-- `url`: The canonical URL of the matching page
-- `title`: A snippet of the page title, taken from the `<title>` HTML tag
-- `description`: A snippet of the page's meta description, taken from the `<meta name="description">` HTML tag
-- `content`: A snippet of the page's text content. Text is parsed using [go-readability](https://github.com/go-shiori/go-readability) by default. If Readability doesn't find an article, text is taken from all elements except those on [this list](https://github.com/FluxCapacitor2/easysearch/blob/97ac9963390ab7bce2f886a60033e2e4dfda08cd/crawler.go#L168).
-- `rank`: The relative ranking of the item. **Lower numbers indicate greater relevance** to the search query.
+- `results`: The list of search results
+  - `url`: The canonical URL of the matching page
+  - `title`: A snippet of the page title, taken from the `<title>` HTML tag
+  - `description`: A snippet of the page's meta description, taken from the `<meta name="description">` HTML tag
+  - `content`: A snippet of the page's text content. Text is parsed using [go-readability](https://github.com/go-shiori/go-readability) by default. If Readability doesn't find an article, text is taken from all elements except those on [this list](https://github.com/FluxCapacitor2/easysearch/blob/97ac9963390ab7bce2f886a60033e2e4dfda08cd/crawler.go#L168).
+  - `rank`: The relative ranking of the item. **Lower numbers indicate greater relevance** to the search query.
+- `pagination`:
+  - `page`: The page specified in the request.
+  - `pageSize`: The maximum amount of items returned. Currently, this value is always 10.
+  - `total`: The total amount of results that match the query. The amount of pages can be computed by dividing the `total` by the `pageSize`.
+- `responseTime`: The amount of time, in seconds, that it took to process the request.
 
 `title`, `description`, and `content` are arrays. If an item is `highlighted`, then it directly matches the query. This allows you to bold relevant keywords in search results when building a user interface.
 
