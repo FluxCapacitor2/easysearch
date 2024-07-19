@@ -10,7 +10,7 @@ type Database interface {
 	hasDocument(source string, url string) (*bool, error)
 
 	// Run a fulltext search with the given query
-	search(sources []string, query string) ([]Result, error)
+	search(sources []string, query string, page uint32, pageSize uint32) ([]Result, *uint32, error)
 
 	// Add an item to the crawl queue
 	addToQueue(source string, urls []string, depth int32) error

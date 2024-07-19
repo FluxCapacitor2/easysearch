@@ -1,3 +1,9 @@
 {
-  "recommendations": ["golang.go", "github.vscode-github-actions"]
+  "recommendations": [
+    "golang.go",
+    "github.vscode-github-actions",
+    "casualjim.gotemplate",
+    "esbenp.prettier-vscode",
+    "qwtel.sqlite-viewer"
+  ]
 }

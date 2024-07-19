@@ -59,7 +59,7 @@ func main() {
 	go handleRefresh(db, config)
 
 	// Create an API server
-	serve(db, config.Http.Listen, config.Http.Port)
+	serve(db, config)
 }
 
 func startCrawl(db Database, config *config) {

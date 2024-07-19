@@ -9,6 +9,17 @@ http:
   listen: localhost
   port: 8080
 
+resultsPage:
+  # Enables the default search results page at localhost:8080 (the address specified in the `http` block above)
+  enabled: true
+  # Inject an HTML fragment at the bottom of the <head> element on the search results page
+  customHTML: |
+    <style type="text/css">
+      h1 {
+        color: green;
+      }
+    </style>
+
 sources:
   # Internally identify the site as `brendan`. All API requests will have to reference this ID.
   - id: brendan

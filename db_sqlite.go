@@ -180,7 +180,15 @@ type RawResult struct {
 	Content     string
 }
 
-func (db *SQLiteDatabase) search(sources []string, search string) ([]Result, error) {
+// TODO: escape the search term. If it contains a . or unclosed quote, it triggers a syntax error and the query fails.
+//
+//	(see https://sqlite.org/fts5.html#full_text_query_syntax)
+func (db *SQLiteDatabase) search(sources []string, search string, page uint32, pageSize uint32) ([]Result, *uint32, error) {
+
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	start := uuid.New().String()
 	end := uuid.New().String()
@@ -190,8 +198,8 @@ func (db *SQLiteDatabase) search(sources []string, search string) ([]Result, err
 			url,
 			highlight(pages_fts, 2, ?, ?) title,
 			snippet(pages_fts, 3, ?, ?, '…', 8) description,
-			snippet(pages_fts, 4, ?, ?, '…', 10) content
-		FROM pages_fts WHERE source IN (%s) AND status = ? AND pages_fts MATCH ? ORDER BY rank;
+			snippet(pages_fts, 4, ?, ?, '…', 24) content
+		FROM pages_fts WHERE source IN (%s) AND status = ? AND pages_fts MATCH ? ORDER BY rank LIMIT ? OFFSET ?;
 		`, strings.Repeat("?, ", len(sources)-1)+"?")
 
 	// Convert the sources (a []string) into a slice of type []any by manually copying each element
@@ -207,12 +215,15 @@ func (db *SQLiteDatabase) search(sources []string, search string) ([]Result, err
 	// Add the required status and search term as parameters
 	args = append(args,
 		Finished, // (as opposed to the Error or Unindexable states)
-		search)
+		search,
+		pageSize,
+		(page-1)*pageSize,
+	)
 
 	rows, err := db.conn.Query(query, args...)
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var results []Result
@@ -221,7 +232,7 @@ func (db *SQLiteDatabase) search(sources []string, search string) ([]Result, err
 		item := &RawResult{}
 		err := rows.Scan(&item.Rank, &item.Url, &item.Title, &item.Description, &item.Content)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Process the result to convert strings into `Match` instances
@@ -236,7 +247,24 @@ func (db *SQLiteDatabase) search(sources []string, search string) ([]Result, err
 		results = append(results, *res)
 	}
 
-	return results, nil
+	var total *uint32
+	{
+		cursor := tx.QueryRow(
+			fmt.Sprintf("SELECT COUNT(*) FROM pages_fts WHERE source IN (%s) AND status = ? AND pages_fts MATCH ?", strings.Repeat("?, ", len(sources)-1)+"?"), args[6:8+len(sources)]...)
+		err := cursor.Scan(&total)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	{
+		err := tx.Commit()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return results, total, nil
 }
 
 // SQLite FTS5 queries support a `highlight` function which surrounds exact matches with strings.

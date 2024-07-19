@@ -7,6 +7,7 @@ A simple way to add search to your website, featuring:
 - Sitemap scanning
 - An API for search results
 - Multi-tenancy
+- A prebuilt search page that works without JavaScript (with [progressive enhancement](https://developer.mozilla.org/en-US/docs/Glossary/Progressive_Enhancement) for users with JS enabled)
 
 This project is built with [Go](https://go.dev/) and requires [CGo](https://go.dev/wiki/cgo) due to the [SQLite](https://www.sqlite.org/) [dependency](https://github.com/mattn/go-sqlite3).
 
@@ -67,6 +68,16 @@ go run --tags="fts5" .
 
 </small>
 
+For automatic code formatting, make sure you have [Node.js](https://nodejs.org/) installed. Then, install [Prettier](https://prettier.io/) via NPM:
+
+```
+npm install
+```
+
+You can now format the HTML template using `prettier -w .` or enable the recommended VS Code extension to format whenever you save. This will also install a Git hook that formats Go and Go template files before committing.
+
+For Go source files, instead of Prettier, use `go fmt`.
+
 ## Building and Running an Executable
 
 You can build a binary with this command:
@@ -116,6 +127,7 @@ To get search results, make a GET request to the `/search` endpoint with the fol
 
 - **`source`**: The ID of your search source. This must match the value of one of the `id` properties in your `config.yml` file.
 - **`q`**: Your search query.
+- **`page`**: The page number, starting at 1. Each page will contain 10 results.
 
 For example:
 

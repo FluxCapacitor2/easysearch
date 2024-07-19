@@ -1,0 +1,9 @@
+{
+  "[gotmpl]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "files.associations": {
+    "*.html.tmpl": "gohtml"
+  }
+}

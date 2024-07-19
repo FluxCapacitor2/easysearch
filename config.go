@@ -15,7 +15,16 @@ type config struct {
 		Driver           string
 		ConnectionString string `yaml:"connectionString"`
 	}
-	Sources []Source
+	Sources     []Source
+	ResultsPage ResultsPageConfig `yaml:"resultsPage"`
+}
+
+type ResultsPageConfig struct {
+	// Whether the search results page should be enabled.
+	Enabled bool
+	// An arbitrary HTML string that gets injected at the bottom of the `<head>` on the search results page.
+	// Use this to add custom scripts or styles.
+	CustomHTML string `yaml:"customHTML"`
 }
 
 type Source struct {

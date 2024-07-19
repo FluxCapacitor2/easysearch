@@ -88,18 +88,24 @@ func crawl(source Source, currentDepth int32, db Database, pageUrl string) (*Cra
 			})
 		}
 
+		title := strings.TrimSpace(element.DOM.Find("title").Text())
+
 		if err != nil || article.TextContent == "" {
 			// Readability couldn't parse the document. Instead,
 			// use a simpler heuristic to find text content.
 
-			title := element.DOM.Find("title").Text()
 			content := ""
 			for _, item := range element.DOM.Nodes {
 				content += getText(item)
 			}
 			_, err = db.addDocument(source.Id, currentDepth, canonical, Finished, title, description, content)
 		} else {
-			_, err = db.addDocument(source.Id, currentDepth, canonical, Finished, article.Title, description, article.TextContent)
+
+			if len(title) == 0 {
+				title = article.Title
+			}
+
+			_, err = db.addDocument(source.Id, currentDepth, canonical, Finished, title, description, article.TextContent)
 		}
 
 		if err != nil {

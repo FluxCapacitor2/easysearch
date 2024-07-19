@@ -1,0 +1,135 @@
+{{ define "highlight" }}
+  {{ range $index, $value := . }}
+    {{ if $value.Highlighted }}
+      <b>{{ $value.Content }}</b>
+    {{ else }}
+      {{ $value.Content }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ define "results" }}
+  {{ if .Results }}
+    {{ range $index, $result := .Results }}
+      <div class="result">
+        <ul class="breadcrumbs">
+          {{ range $index, $item := $result.Breadcrumbs }}
+            {{ if $index }}
+              <!-- The right-angled chevron in between items -->
+              <li aria-hidden="true">&raquo;</li>
+            {{ else }}
+              <a href="{{ $item.Url }}">
+                <img
+                  src="https://icons.duckduckgo.com/ip3/{{ $item.Text }}.ico"
+                  class="favicon"
+                />
+              </a>
+            {{ end }}
+            <li>
+              <a href="{{ $item.Url }}">{{ $item.Text }}</a>
+            </li>
+          {{ end }}
+        </ul>
+        <a href="{{ $result.Url }}">{{ template "highlight" $result.Title }}</a>
+        <p>{{ template "highlight" $result.Content }}</p>
+      </div>
+    {{ end }}
+
+    {{ range $index, $value := .Pages }}
+      {{ if $value.Current }}
+        <button disabled>
+          {{ $value.Number }}
+        </button>
+      {{ else }}
+        <a href="{{ $value.Url }}" class="page-number" hx-boost="true">
+          <button>
+            {{ $value.Number }}
+          </button>
+        </a>
+      {{ end }}
+    {{ end }}
+
+
+    <p class="count">{{ .Total }} results found in {{ .Time }}s.</p>
+  {{ else }}
+    No results found.
+  {{ end }}
+{{ end }}
+
+{{ define "index" }}
+  <!doctype html>
+  <html>
+    <head>
+      <meta charset="UTF-8" />
+      <title>Search</title>
+      <meta
+        name="generator"
+        content="Easysearch (https://github.com/FluxCapacitor2/easysearch)"
+      />
+      <!-- modern-normalize is a CSS reset, which helps the site look consistent across all modern browsers -->
+      <link
+        rel="stylesheet"
+        type="text/css"
+        href="https://unpkg.com/modern-normalize@2.0.0/modern-normalize.css"
+      />
+      <link rel="stylesheet" type="text/css" href="/style.css" />
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+      <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap"
+        rel="stylesheet"
+      />
+
+      <script
+        src="https://unpkg.com/htmx.org@2.0.1"
+        integrity="sha384-QWGpdj554B4ETpJJC9z+ZHJcA/i59TyjxEPXiiUgN2WmTyV5OEZWCD6gQhgkdpB/"
+        crossorigin="anonymous"
+        defer
+      ></script>
+      {{ .CustomHTML }}
+    </head>
+    <body class="inter-regular">
+      <main class="container">
+        <form
+          class="search-form"
+          method="GET"
+          action="/"
+          hx-get="/results"
+          hx-trigger="keyup changed delay:100ms from:[type=search], change delay:200ms from:[type=checkbox], submit throttle:500ms"
+          hx-target="#results"
+        >
+          <h1>Search</h1>
+          <p>
+            Include results from:
+            {{ range $index, $value := .Sources }}
+              <label>
+                <input
+                  type="checkbox"
+                  name="source"
+                  value="{{ $value.Id }}"
+                  checked="{{ $value.Enabled }}"
+                />
+                {{ $value.Id }}
+              </label>
+            {{ end }}
+          </p>
+          <div class="row">
+            <input
+              type="search"
+              name="q"
+              placeholder="Search..."
+              value="{{ .Query }}"
+            />
+            <noscript>
+              <button type="submit">Search</button>
+            </noscript>
+          </div>
+          <input type="hidden" name="page" value="1" />
+        </form>
+        <div id="results">
+          {{ template "results" . }}
+        </div>
+      </main>
+    </body>
+  </html>
+{{ end }}
