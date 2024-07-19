@@ -321,6 +321,7 @@ func (db *SQLiteDatabase) addToQueue(source string, urls []string, depth int32) 
 	}
 
 	for _, url := range urls {
+		// TODO: don't override depth if the existing value is lower
 		_, err := tx.Exec("REPLACE INTO crawl_queue (source, url, depth) VALUES (?, ?, ?)", source, url, depth)
 		if err != nil {
 			rbErr := tx.Rollback()
@@ -390,7 +391,7 @@ func (db *SQLiteDatabase) queuePagesOlderThan(source string, daysAgo int32) erro
 
 		row := &Page{}
 
-		err := rows.Scan(&row.source, &row.url, &row.crawledAt, &row.depth)
+		err := rows.Scan(&row.source, &row.url, &row.crawledAt, &row.depth, &row.status)
 
 		if err != nil {
 			return err
