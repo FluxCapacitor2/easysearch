@@ -161,7 +161,7 @@ func renderTemplateWithResults(db Database, config *config, req *http.Request, w
 		})
 	}
 
-	pageCount := int(*total / 10)
+	pageCount := int(math.Ceil(float64(*total) / 10.0))
 	if pageCount < 1 {
 		pageCount = 1
 	}
