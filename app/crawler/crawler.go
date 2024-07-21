@@ -1,4 +1,4 @@
-package main
+package crawler
 
 import (
 	"bytes"
@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/fluxcapacitor2/easysearch/app/config"
+	"github.com/fluxcapacitor2/easysearch/app/database"
 	"github.com/go-shiori/go-readability"
 	"github.com/gocolly/colly"
 	"github.com/mmcdole/gofeed"
@@ -18,12 +20,12 @@ import (
 
 type CrawlResult struct {
 	// The URLs discovered while visiting the page which should be added to the crawl queue.
-	urls []string
+	URLs []string
 	// The canonical URL of the page, discovered by reading meta tags and following redirects.
-	canonical string
+	Canonical string
 }
 
-func crawl(source Source, currentDepth int32, db Database, pageURL string) (*CrawlResult, error) {
+func Crawl(source config.Source, currentDepth int32, db database.Database, pageURL string) (*CrawlResult, error) {
 
 	// Parse the URL, canonicalize it, and convert it back into a string for later use
 	orig, err := url.Parse(pageURL)
@@ -32,7 +34,7 @@ func crawl(source Source, currentDepth int32, db Database, pageURL string) (*Cra
 		return nil, err
 	}
 
-	parsedURL, err := canonicalize(source.ID, db, orig)
+	parsedURL, err := Canonicalize(source.ID, db, orig)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +54,7 @@ func crawl(source Source, currentDepth int32, db Database, pageURL string) (*Cra
 		if err != nil {
 			return err
 		}
-		url, err := canonicalize(source.ID, db, parsed)
+		url, err := Canonicalize(source.ID, db, parsed)
 		if err == nil {
 			urls[url.String()] = struct{}{}
 		}
@@ -107,14 +109,14 @@ func crawl(source Source, currentDepth int32, db Database, pageURL string) (*Cra
 			for _, item := range element.DOM.Nodes {
 				content += getText(item)
 			}
-			_, err = db.addDocument(source.ID, currentDepth, canonical, Finished, title, description, content)
+			_, err = db.AddDocument(source.ID, currentDepth, canonical, database.Finished, title, description, content)
 		} else {
 
 			if len(title) == 0 {
 				title = article.Title
 			}
 
-			_, err = db.addDocument(source.ID, currentDepth, canonical, Finished, title, description, article.TextContent)
+			_, err = db.AddDocument(source.ID, currentDepth, canonical, database.Finished, title, description, article.TextContent)
 		}
 
 		if err != nil {
@@ -153,7 +155,7 @@ func crawl(source Source, currentDepth int32, db Database, pageURL string) (*Cra
 
 		if len(urls) > 0 { // <- This will be true if URLs were found *before* the HTML document was indexed, which only happens for sitemaps/feeds.
 			// This page is a sitemap. Insert an "unindexable" document, which records that this document has been crawled, but has no text content of its own.
-			db.addDocument(source.ID, currentDepth, canonical, Unindexable, "", "", "")
+			db.AddDocument(source.ID, currentDepth, canonical, database.Unindexable, "", "", "")
 		}
 	})
 
@@ -167,11 +169,11 @@ func crawl(source Source, currentDepth int32, db Database, pageURL string) (*Cra
 	collector.Wait()
 
 	result := &CrawlResult{}
-	result.urls = maps.Keys(urls)
-	result.canonical = canonical
+	result.URLs = maps.Keys(urls)
+	result.Canonical = canonical
 
 	if canonical != pageURL {
-		err := db.setCanonical(source.ID, pageURL, canonical)
+		err := db.SetCanonical(source.ID, pageURL, canonical)
 		if err != nil {
 			fmt.Printf("Failed to set canonical URL of page %v to %v: %v\n", pageURL, canonical, err)
 		}
@@ -203,13 +205,13 @@ func getText(node *html.Node) string {
 }
 
 // Format URLs to keep them as consistent as possible
-func canonicalize(src string, db Database, url *url.URL) (*url.URL, error) {
+func Canonicalize(src string, db database.Database, url *url.URL) (*url.URL, error) {
 
 	// Check if we already have a canonical URL recorded
-	canonical, _ := db.getCanonical(src, url.String())
+	canonical, _ := db.GetCanonical(src, url.String())
 
 	if canonical != nil {
-		return url.Parse(canonical.canonical)
+		return url.Parse(canonical.Canonical)
 	}
 
 	// If not, try to make an educated guess:

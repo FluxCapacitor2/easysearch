@@ -76,7 +76,7 @@ npm install
 
 You can now format the HTML template using `prettier -w .` or enable the recommended VS Code extension to format whenever you save. This will also install a Git hook that formats Go and Go template files before committing.
 
-For Go source files, instead of Prettier, use `go fmt`.
+For Go source files, instead of Prettier, use `go fmt`. You can format the whole source tree with `go fmt ./app/...`.
 
 ## Building and Running an Executable
 

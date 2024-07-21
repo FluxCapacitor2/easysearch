@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type config struct {
+type Config struct {
 	HTTP struct {
 		Listen string
 		Port   int16
@@ -48,14 +48,14 @@ type Source struct {
 	}
 }
 
-func readConfig() (*config, error) {
+func Read() (*Config, error) {
 
 	data, err := os.ReadFile("./config.yml")
 	if err != nil {
 		return nil, err
 	}
 
-	config := &config{}
+	config := &Config{}
 	err = yaml.Unmarshal([]byte(data), config)
 
 	if err != nil {

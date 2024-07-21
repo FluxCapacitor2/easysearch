@@ -1,6 +1,4 @@
-package main
-
-// https://sqlite.org/fts5.html
+package database
 
 import (
 	"database/sql"
@@ -11,11 +9,14 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// SQLiteDatabase is a database driver that uses SQLite's FTS5 extension
+// to create a full-text search index. For more info on FTS5, see their
+// official documentation: https://sqlite.org/fts5.html
 type SQLiteDatabase struct {
 	conn *sql.DB
 }
 
-func (db *SQLiteDatabase) setup() error {
+func (db *SQLiteDatabase) Setup() error {
 	{
 		// Enable write-ahead logging for improved write performance (https://www.sqlite.org/wal.html)
 		_, err := db.conn.Exec("PRAGMA journal_mode=WAL;")
@@ -96,7 +97,7 @@ func (db *SQLiteDatabase) setup() error {
 	return nil
 }
 
-func (db *SQLiteDatabase) addDocument(source string, depth int32, url string, status QueueItemStatus, title string, description string, content string) (*Page, error) {
+func (db *SQLiteDatabase) AddDocument(source string, depth int32, url string, status QueueItemStatus, title string, description string, content string) (*Page, error) {
 	tx, err := db.conn.Begin()
 
 	if err != nil {
@@ -133,7 +134,7 @@ func (db *SQLiteDatabase) addDocument(source string, depth int32, url string, st
 	row := &Page{}
 
 	{
-		err := result.Scan(&row.source, &row.url, &row.title, &row.description, &row.content, &row.status)
+		err := result.Scan(&row.Source, &row.URL, &row.Title, &row.Description, &row.Content, &row.Status)
 
 		if err != nil {
 			fmt.Printf("Error scanning inserted row: %v\n", err)
@@ -152,12 +153,12 @@ func (db *SQLiteDatabase) addDocument(source string, depth int32, url string, st
 	return row, nil
 }
 
-func (db *SQLiteDatabase) hasDocument(source string, url string) (*bool, error) {
+func (db *SQLiteDatabase) HasDocument(source string, url string) (*bool, error) {
 	// TODO: SELECTing the URL is unnecessary. we can just use a "SELECT 1" and see if any rows were returned.
 	cursor := db.conn.QueryRow("SELECT url FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?))", source, url, url)
 
 	page := &Page{}
-	err := cursor.Scan(&page.url)
+	err := cursor.Scan(&page.URL)
 
 	exists := true
 
@@ -183,7 +184,7 @@ type RawResult struct {
 // TODO: escape the search term. If it contains a . or unclosed quote, it triggers a syntax error and the query fails.
 //
 //	(see https://sqlite.org/fts5.html#full_text_query_syntax)
-func (db *SQLiteDatabase) search(sources []string, search string, page uint32, pageSize uint32) ([]Result, *uint32, error) {
+func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, pageSize uint32) ([]Result, *uint32, error) {
 
 	tx, err := db.conn.Begin()
 	if err != nil {
@@ -310,7 +311,7 @@ func processResult(input string, start string, end string) []Match {
 	}
 }
 
-func (db *SQLiteDatabase) addToQueue(source string, urls []string, depth int32) error {
+func (db *SQLiteDatabase) AddToQueue(source string, urls []string, depth int32) error {
 
 	// https://news.ycombinator.com/item?id=27482402
 
@@ -336,17 +337,17 @@ func (db *SQLiteDatabase) addToQueue(source string, urls []string, depth int32) 
 	return err
 }
 
-func (db *SQLiteDatabase) updateQueueEntry(source string, url string, status QueueItemStatus) error {
+func (db *SQLiteDatabase) UpdateQueueEntry(source string, url string, status QueueItemStatus) error {
 	// TODO: check for affected rows. if no rows were affected, then the update failed, potentially due to another instance updating the status at the same time.
 	_, err := db.conn.Exec("UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE source = ? AND url = ?", status, source, url)
 	return err
 }
 
-func (db *SQLiteDatabase) getFirstInQueue(source string) (*QueueItem, error) {
+func (db *SQLiteDatabase) GetFirstInQueue(source string) (*QueueItem, error) {
 	cursor := db.conn.QueryRow("SELECT * FROM crawl_queue WHERE source = ? AND status = ? ORDER BY addedAt LIMIT 1", source, Pending)
 
 	item := &QueueItem{}
-	err := cursor.Scan(&item.source, &item.url, &item.status, &item.depth, &item.addedAt, &item.updatedAt)
+	err := cursor.Scan(&item.Source, &item.URL, &item.Status, &item.Depth, &item.AddedAt, &item.UpdatedAt)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -358,7 +359,7 @@ func (db *SQLiteDatabase) getFirstInQueue(source string) (*QueueItem, error) {
 	return item, nil
 }
 
-func (db *SQLiteDatabase) cleanQueue() error {
+func (db *SQLiteDatabase) CleanQueue() error {
 	// Clear all Finished queue items
 	{
 		_, err := db.conn.Exec("DELETE FROM crawl_queue WHERE status = ?", Finished)
@@ -380,7 +381,7 @@ func (db *SQLiteDatabase) cleanQueue() error {
 	return nil
 }
 
-func (db *SQLiteDatabase) queuePagesOlderThan(source string, daysAgo int32) error {
+func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) error {
 	rows, err := db.conn.Query("SELECT * FROM pages WHERE source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
 
 	if err != nil {
@@ -391,7 +392,7 @@ func (db *SQLiteDatabase) queuePagesOlderThan(source string, daysAgo int32) erro
 
 		row := &Page{}
 
-		err := rows.Scan(&row.source, &row.url, &row.crawledAt, &row.depth, &row.status)
+		err := rows.Scan(&row.Source, &row.URL, &row.CrawledAt, &row.Depth, &row.Status)
 
 		if err != nil {
 			return err
@@ -399,7 +400,7 @@ func (db *SQLiteDatabase) queuePagesOlderThan(source string, daysAgo int32) erro
 
 		{
 
-			err := db.addToQueue(source, []string{row.url}, row.depth)
+			err := db.AddToQueue(source, []string{row.URL}, row.Depth)
 
 			if err != nil {
 				return err
@@ -410,11 +411,11 @@ func (db *SQLiteDatabase) queuePagesOlderThan(source string, daysAgo int32) erro
 	return nil
 }
 
-func (db *SQLiteDatabase) getCanonical(source string, url string) (*Canonical, error) {
+func (db *SQLiteDatabase) GetCanonical(source string, url string) (*Canonical, error) {
 	cursor := db.conn.QueryRow("SELECT * FROM canonicals WHERE source = ? AND url = ?", source, url)
 
 	canonical := &Canonical{}
-	err := cursor.Scan(&canonical.url, &canonical.canonical, &canonical.crawledAt)
+	err := cursor.Scan(&canonical.Original, &canonical.Canonical, &canonical.CrawledAt)
 
 	if err != nil {
 		return nil, err
@@ -422,12 +423,12 @@ func (db *SQLiteDatabase) getCanonical(source string, url string) (*Canonical, e
 	return canonical, nil
 }
 
-func (db *SQLiteDatabase) setCanonical(source string, url string, canonical string) error {
+func (db *SQLiteDatabase) SetCanonical(source string, url string, canonical string) error {
 	_, err := db.conn.Exec("REPLACE INTO canonicals (source, url, canonical) VALUES (?, ?, ?)", source, url, canonical)
 	return err
 }
 
-func createSQLiteDatabase(fileName string) (*SQLiteDatabase, error) {
+func SQLite(fileName string) (*SQLiteDatabase, error) {
 	conn, err := sql.Open("sqlite3", fileName)
 
 	if err != nil {

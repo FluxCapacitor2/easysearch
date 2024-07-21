@@ -1,61 +1,3 @@
-{{ define "highlight" }}
-  {{ range $index, $value := . }}
-    {{ if $value.Highlighted }}
-      <b>{{ $value.Content }}</b>
-    {{ else }}
-      {{ $value.Content }}
-    {{ end }}
-  {{ end }}
-{{ end }}
-
-{{ define "results" }}
-  {{ if .Results }}
-    {{ range $index, $result := .Results }}
-      <div class="result">
-        <ul class="breadcrumbs">
-          {{ range $index, $item := $result.Breadcrumbs }}
-            {{ if $index }}
-              <!-- The right-angled chevron in between items -->
-              <li aria-hidden="true">&raquo;</li>
-            {{ else }}
-              <a href="{{ $item.URL }}">
-                <img
-                  src="https://icons.duckduckgo.com/ip3/{{ $item.Text }}.ico"
-                  class="favicon"
-                />
-              </a>
-            {{ end }}
-            <li>
-              <a href="{{ $item.URL }}">{{ $item.Text }}</a>
-            </li>
-          {{ end }}
-        </ul>
-        <a href="{{ $result.URL }}">{{ template "highlight" $result.Title }}</a>
-        <p>{{ template "highlight" $result.Content }}</p>
-      </div>
-    {{ end }}
-
-    {{ range $index, $value := .Pages }}
-      {{ if $value.Current }}
-        <button disabled>
-          {{ $value.Number }}
-        </button>
-      {{ else }}
-        <a href="{{ $value.URL }}" class="page-number" hx-boost="true">
-          <button>
-            {{ $value.Number }}
-          </button>
-        </a>
-      {{ end }}
-    {{ end }}
-
-
-    <p class="count">{{ .Total }} results found in {{ .Time }}s.</p>
-  {{ else if .Query }}
-    No results found.
-  {{ end }}
-{{ end }}
-
 {{ define "index" }}
   <!doctype html>
   <html>
@@ -72,7 +14,7 @@
         type="text/css"
         href="https://unpkg.com/modern-normalize@2.0.0/modern-normalize.css"
       />
-      <link rel="stylesheet" type="text/css" href="/style.css" />
+      <link rel="stylesheet" type="text/css" href="/static/style.css" />
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
       <link
