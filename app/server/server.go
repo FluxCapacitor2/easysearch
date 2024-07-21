@@ -2,7 +2,6 @@ package server
 
 import (
 	"embed"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -74,7 +73,7 @@ func Start(db database.Database, config *config.Config) {
 
 		src := req.URL.Query()["source"]
 		q := req.URL.Query().Get("q")
-		page, err := strconv.Atoi(req.URL.Query().Get("page"))
+		page, err := strconv.ParseUint(req.URL.Query().Get("page"), 10, 32)
 
 		if q != "" && src != nil && len(src) > 0 && err == nil {
 			results, total, err := db.Search(src, q, uint32(page), 10)
@@ -153,7 +152,7 @@ type togglableSource struct {
 func renderTemplateWithResults(db database.Database, config *config.Config, req *http.Request, w http.ResponseWriter, t *template.Template, templateName string) {
 	src := req.URL.Query()["source"]
 	q := req.URL.Query().Get("q")
-	page, err := strconv.Atoi(req.URL.Query().Get("page"))
+	page, err := strconv.ParseUint(req.URL.Query().Get("page"),10,32)
 
 	var results []database.Result
 	var total *uint32
@@ -193,7 +192,7 @@ func renderTemplateWithResults(db database.Database, config *config.Config, req 
 	if pageCount < 1 {
 		pageCount = 1
 	}
-	pages := createPagination(req.URL, page, pageCount)
+	pages := createPagination(req.URL, int(page), pageCount)
 
 	mappedResults := make([]searchResult, len(results))
 	for i, res := range results {
