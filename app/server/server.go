@@ -152,7 +152,7 @@ type togglableSource struct {
 func renderTemplateWithResults(db database.Database, config *config.Config, req *http.Request, w http.ResponseWriter, t *template.Template, templateName string) {
 	src := req.URL.Query()["source"]
 	q := req.URL.Query().Get("q")
-	page, err := strconv.ParseUint(req.URL.Query().Get("page"),10,32)
+	page, err := strconv.ParseUint(req.URL.Query().Get("page"), 10, 32)
 
 	var results []database.Result
 	var total *uint32
