@@ -153,7 +153,7 @@ func Crawl(source config.Source, currentDepth int32, db database.Database, pageU
 			return
 		}
 
-		if len(urls) > 0 { // <- This will be true if URLs were found *before* the HTML document was indexed, which only happens for sitemaps/feeds.
+		if len(urls) > 0 { // <- This will be true if URLs were found *before* an HTML document was parsed, which only happens for sitemaps/feeds.
 			// This page is a sitemap. Insert an "unindexable" document, which records that this document has been crawled, but has no text content of its own.
 			db.AddDocument(source.ID, currentDepth, canonical, database.Unindexable, "", "", "")
 		}
