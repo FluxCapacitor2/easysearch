@@ -18,7 +18,7 @@
               <!-- The right-angled chevron in between items -->
               <li aria-hidden="true">&raquo;</li>
             {{ else }}
-              <a href="{{ $item.Url }}">
+              <a href="{{ $item.URL }}">
                 <img
                   src="https://icons.duckduckgo.com/ip3/{{ $item.Text }}.ico"
                   class="favicon"
@@ -26,11 +26,11 @@
               </a>
             {{ end }}
             <li>
-              <a href="{{ $item.Url }}">{{ $item.Text }}</a>
+              <a href="{{ $item.URL }}">{{ $item.Text }}</a>
             </li>
           {{ end }}
         </ul>
-        <a href="{{ $result.Url }}">{{ template "highlight" $result.Title }}</a>
+        <a href="{{ $result.URL }}">{{ template "highlight" $result.Title }}</a>
         <p>{{ template "highlight" $result.Content }}</p>
       </div>
     {{ end }}
@@ -41,7 +41,7 @@
           {{ $value.Number }}
         </button>
       {{ else }}
-        <a href="{{ $value.Url }}" class="page-number" hx-boost="true">
+        <a href="{{ $value.URL }}" class="page-number" hx-boost="true">
           <button>
             {{ $value.Number }}
           </button>
@@ -106,10 +106,10 @@
                 <input
                   type="checkbox"
                   name="source"
-                  value="{{ $value.Id }}"
+                  value="{{ $value.ID }}"
                   checked="{{ $value.Enabled }}"
                 />
-                {{ $value.Id }}
+                {{ $value.ID }}
               </label>
             {{ end }}
           </p>

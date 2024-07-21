@@ -23,21 +23,21 @@ func main() {
 	// Set up a database connection using the specified driver
 	var db Database
 
-	switch config.Db.Driver {
+	switch config.DB.Driver {
 	case "sqlite":
-		sqlite, err := createSQLiteDatabase(config.Db.ConnectionString)
+		sqlite, err := createSQLiteDatabase(config.DB.ConnectionString)
 		if err != nil {
 			panic(fmt.Sprintf("Error opening SQLite database: %v", err))
 		}
 		db = sqlite
 	// case "postgres":
-	// 	postgres, err := createPostgresDatabase(config.Db.ConnectionString)
+	// 	postgres, err := createPostgresDatabase(config.DB.ConnectionString)
 	// 	if err != nil {
 	// 		panic(fmt.Sprintf("Error opening Postgres database: %v", err))
 	// 	}
 	// 	db = postgres
 	default:
-		panic(fmt.Sprintf("Unknown database driver: %v. Valid drivers include: sqlite, postgres.", config.Db.Driver))
+		panic(fmt.Sprintf("Unknown database driver: %v. Valid drivers include: sqlite, postgres.", config.DB.Driver))
 	}
 
 	{
@@ -67,25 +67,25 @@ func startCrawl(db Database, config *config) {
 	// Then, add their base URLs to the queue.
 
 	for _, src := range config.Sources {
-		exists, err := db.hasDocument(src.Id, src.Url)
+		exists, err := db.hasDocument(src.ID, src.URL)
 
 		if err != nil {
 			fmt.Printf("Failed to look up document %v in pages table\n", err)
 		} else {
 			if !*exists {
 				// If the document wasn't found, it should be added to the queue
-				parsed, err := url.Parse(src.Url)
+				parsed, err := url.Parse(src.URL)
 				if err != nil {
-					fmt.Printf("Failed to parse start URL for source %v (%v): %v\n", src.Id, src.Url, err)
+					fmt.Printf("Failed to parse start URL for source %v (%v): %v\n", src.ID, src.URL, err)
 				} else {
-					canonical, err := canonicalize(src.Id, db, parsed)
+					canonical, err := canonicalize(src.ID, db, parsed)
 					if err != nil {
 						fmt.Printf("Failed to find canonical URL for page %v: %v\n", parsed.String(), err)
 						continue
 					}
-					err = db.addToQueue(src.Id, []string{canonical.String()}, 0)
+					err = db.addToQueue(src.ID, []string{canonical.String()}, 0)
 					if err != nil {
-						fmt.Printf("Failed to add page %v to queue: %v\n", src.Url, err)
+						fmt.Printf("Failed to add page %v to queue: %v\n", src.URL, err)
 					}
 				}
 			}
@@ -107,13 +107,13 @@ func consumeQueue(db Database, config *config) {
 		_, err := scheduler.NewJob(gocron.DurationJob(time.Duration(interval*float64(time.Second))), gocron.NewTask(func() {
 			// Pop the oldest item off the queue and crawl it.
 			// This will result in other items being added to the queue, continuing the cycle.
-			item, err := db.getFirstInQueue(src.Id)
+			item, err := db.getFirstInQueue(src.ID)
 			if err != nil {
 				fmt.Printf("Failed to get next item in crawl queue: %v\n", err)
 			}
 			if item != nil {
 				{
-					err := db.updateQueueEntry(src.Id, item.url, Processing)
+					err := db.updateQueueEntry(src.ID, item.url, Processing)
 					if err != nil {
 						fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.url, Processing, err)
 					}
@@ -122,9 +122,9 @@ func consumeQueue(db Database, config *config) {
 				result, err := crawl(src, item.depth, db, item.url)
 
 				if err != nil {
-					fmt.Printf("Error crawling URL %v from source %v: %v\n", item.url, src.Id, err)
+					fmt.Printf("Error crawling URL %v from source %v: %v\n", item.url, src.ID, err)
 					{
-						err := db.updateQueueEntry(src.Id, item.url, Error)
+						err := db.updateQueueEntry(src.ID, item.url, Error)
 						if err != nil {
 							fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.url, Error, err)
 						}
@@ -132,7 +132,7 @@ func consumeQueue(db Database, config *config) {
 
 					// Add an entry to the pages table to prevent immediately recrawling the same URL when referred from other sources
 					if result != nil {
-						_, err := db.addDocument(src.Id, item.depth, result.canonical, Error, "", "", "")
+						_, err := db.addDocument(src.ID, item.depth, result.canonical, Error, "", "", "")
 						if err != nil {
 							fmt.Printf("Failed to add page in 'error' state: %v\n", err)
 						}
@@ -140,7 +140,7 @@ func consumeQueue(db Database, config *config) {
 
 				} else {
 					// fmt.Printf("Crawl complete: %+v\n", result)
-					err := db.updateQueueEntry(src.Id, item.url, Finished)
+					err := db.updateQueueEntry(src.ID, item.url, Finished)
 					if err != nil {
 						fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.url, Finished, err)
 					}
@@ -150,26 +150,26 @@ func consumeQueue(db Database, config *config) {
 
 					filtered := []string{}
 
-					for _, fullUrl := range result.urls {
-						res, err := url.Parse(fullUrl)
+					for _, fullURL := range result.urls {
+						res, err := url.Parse(fullURL)
 						if err != nil {
 							fmt.Printf("%v\n", err)
 						} else {
 
-							crawled, err := db.hasDocument(src.Id, fullUrl)
+							crawled, err := db.hasDocument(src.ID, fullURL)
 
 							if err == nil && *crawled {
 								continue
 							}
 
 							if slices.Contains(src.AllowedDomains, res.Hostname()) {
-								filtered = append(filtered, fullUrl)
+								filtered = append(filtered, fullURL)
 							}
 						}
 					}
 
 					if item.depth+1 <= src.MaxDepth {
-						err := db.addToQueue(src.Id, filtered, item.depth+1)
+						err := db.addToQueue(src.ID, filtered, item.depth+1)
 						if err != nil {
 							fmt.Printf("Error adding URLs to queue: %v\n", err)
 						}
@@ -209,13 +209,13 @@ func handleRefresh(db Database, config *config) {
 	}
 
 	{
-		_, err := scheduler.NewJob(gocron.DurationJob(time.Duration(20*time.Minute)), gocron.NewTask(func() {
+		_, err := scheduler.NewJob(gocron.DurationJob(time.Duration(1*time.Minute)), gocron.NewTask(func() {
 			for _, src := range config.Sources {
 				if src.Refresh.Enabled {
-					err := db.queuePagesOlderThan(src.Id, src.Refresh.MinAge)
+					err := db.queuePagesOlderThan(src.ID, src.Refresh.MinAge)
 
 					if err != nil {
-						fmt.Printf("Error processing refresh for source %v: %v\n", src.Id, err)
+						fmt.Printf("Error processing refresh for source %v: %v\n", src.ID, err)
 					}
 				}
 			}

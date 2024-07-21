@@ -23,36 +23,36 @@ type CrawlResult struct {
 	canonical string
 }
 
-func crawl(source Source, currentDepth int32, db Database, pageUrl string) (*CrawlResult, error) {
+func crawl(source Source, currentDepth int32, db Database, pageURL string) (*CrawlResult, error) {
 
 	// Parse the URL, canonicalize it, and convert it back into a string for later use
-	orig, err := url.Parse(pageUrl)
+	orig, err := url.Parse(pageURL)
 
 	if err != nil {
 		return nil, err
 	}
 
-	parsedUrl, err := canonicalize(source.Id, db, orig)
+	parsedURL, err := canonicalize(source.ID, db, orig)
 	if err != nil {
 		return nil, err
 	}
-	pageUrl = parsedUrl.String()
+	pageURL = parsedURL.String()
 
-	fmt.Printf("Crawling URL: %v\n", pageUrl)
+	fmt.Printf("Crawling URL: %v\n", pageURL)
 	collector := colly.NewCollector()
 	collector.IgnoreRobotsTxt = false
 	collector.AllowedDomains = source.AllowedDomains
 
 	urls := map[string]struct{}{}
 
-	canonical := pageUrl
+	canonical := pageURL
 
 	add := func(urlStr string) error {
 		parsed, err := url.Parse(urlStr)
 		if err != nil {
 			return err
 		}
-		url, err := canonicalize(source.Id, db, parsed)
+		url, err := canonicalize(source.ID, db, parsed)
 		if err == nil {
 			urls[url.String()] = struct{}{}
 		}
@@ -61,7 +61,7 @@ func crawl(source Source, currentDepth int32, db Database, pageUrl string) (*Cra
 
 	collector.OnHTML("html", func(element *colly.HTMLElement) {
 
-		article, err := readability.FromDocument(element.DOM.Get(0), parsedUrl)
+		article, err := readability.FromDocument(element.DOM.Get(0), parsedURL)
 		description, _ := element.DOM.Find("meta[name=description]").Attr("content")
 
 		{
@@ -107,14 +107,14 @@ func crawl(source Source, currentDepth int32, db Database, pageUrl string) (*Cra
 			for _, item := range element.DOM.Nodes {
 				content += getText(item)
 			}
-			_, err = db.addDocument(source.Id, currentDepth, canonical, Finished, title, description, content)
+			_, err = db.addDocument(source.ID, currentDepth, canonical, Finished, title, description, content)
 		} else {
 
 			if len(title) == 0 {
 				title = article.Title
 			}
 
-			_, err = db.addDocument(source.Id, currentDepth, canonical, Finished, title, description, article.TextContent)
+			_, err = db.addDocument(source.ID, currentDepth, canonical, Finished, title, description, article.TextContent)
 		}
 
 		if err != nil {
@@ -153,7 +153,7 @@ func crawl(source Source, currentDepth int32, db Database, pageUrl string) (*Cra
 
 		if len(urls) > 0 { // <- This will be true if URLs were found *before* the HTML document was indexed, which only happens for sitemaps/feeds.
 			// This page is a sitemap. Insert an "unindexable" document, which records that this document has been crawled, but has no text content of its own.
-			db.addDocument(source.Id, currentDepth, canonical, Unindexable, "", "", "")
+			db.addDocument(source.ID, currentDepth, canonical, Unindexable, "", "", "")
 		}
 	})
 
@@ -162,7 +162,7 @@ func crawl(source Source, currentDepth int32, db Database, pageUrl string) (*Cra
 		add(href)
 	})
 
-	err = collector.Visit(pageUrl)
+	err = collector.Visit(pageURL)
 
 	collector.Wait()
 
@@ -170,10 +170,10 @@ func crawl(source Source, currentDepth int32, db Database, pageUrl string) (*Cra
 	result.urls = maps.Keys(urls)
 	result.canonical = canonical
 
-	if canonical != pageUrl {
-		err := db.setCanonical(source.Id, pageUrl, canonical)
+	if canonical != pageURL {
+		err := db.setCanonical(source.ID, pageURL, canonical)
 		if err != nil {
-			fmt.Printf("Failed to set canonical URL of page %v to %v: %v\n", pageUrl, canonical, err)
+			fmt.Printf("Failed to set canonical URL of page %v to %v: %v\n", pageURL, canonical, err)
 		}
 	}
 

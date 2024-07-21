@@ -174,7 +174,7 @@ func (db *SQLiteDatabase) hasDocument(source string, url string) (*bool, error) 
 
 type RawResult struct {
 	Rank        float64
-	Url         string
+	URL         string
 	Title       string
 	Description string
 	Content     string
@@ -230,7 +230,7 @@ func (db *SQLiteDatabase) search(sources []string, search string, page uint32, p
 
 	for rows.Next() {
 		item := &RawResult{}
-		err := rows.Scan(&item.Rank, &item.Url, &item.Title, &item.Description, &item.Content)
+		err := rows.Scan(&item.Rank, &item.URL, &item.Title, &item.Description, &item.Content)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -238,7 +238,7 @@ func (db *SQLiteDatabase) search(sources []string, search string, page uint32, p
 		// Process the result to convert strings into `Match` instances
 		res := &Result{
 			Rank:        item.Rank,
-			Url:         item.Url,
+			URL:         item.URL,
 			Title:       processResult(item.Title, start, end),
 			Description: processResult(item.Description, start, end),
 			Content:     processResult(item.Content, start, end),

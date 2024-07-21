@@ -37,18 +37,18 @@ type searchResult struct {
 }
 
 type breadcrumb struct {
-	Url  string
+	URL  string
 	Text string
 }
 
 type resultsPage struct {
 	Number  string
 	Current bool
-	Url     string
+	URL     string
 }
 
 type togglableSource struct {
-	Id      string
+	ID      string
 	Enabled bool
 }
 
@@ -70,13 +70,13 @@ func createPagination(req *http.Request, page int, pageCount int) []resultsPage 
 	pages = append(pages, resultsPage{
 		Number:  "«",
 		Current: page == 1,
-		Url:     urlWithParam(req.URL, "page", "1"),
+		URL:     urlWithParam(req.URL, "page", "1"),
 	})
 
 	pages = append(pages, resultsPage{
 		Number:  "←",
 		Current: page == 1,
-		Url:     urlWithParam(req.URL, "page", strconv.Itoa(page-1)),
+		URL:     urlWithParam(req.URL, "page", strconv.Itoa(page-1)),
 	})
 
 	startIndex := page - 5
@@ -104,20 +104,20 @@ func createPagination(req *http.Request, page int, pageCount int) []resultsPage 
 		pages = append(pages, resultsPage{
 			Number:  strconv.Itoa(i),
 			Current: page == i,
-			Url:     urlWithParam(req.URL, "page", strconv.Itoa(i)),
+			URL:     urlWithParam(req.URL, "page", strconv.Itoa(i)),
 		})
 	}
 
 	pages = append(pages, resultsPage{
 		Number:  "→",
 		Current: page == pageCount,
-		Url:     urlWithParam(req.URL, "page", strconv.Itoa(page+1)),
+		URL:     urlWithParam(req.URL, "page", strconv.Itoa(page+1)),
 	})
 
 	pages = append(pages, resultsPage{
 		Number:  "»",
 		Current: page == pageCount,
-		Url:     urlWithParam(req.URL, "page", strconv.Itoa(pageCount)),
+		URL:     urlWithParam(req.URL, "page", strconv.Itoa(pageCount)),
 	})
 
 	return pages
@@ -157,8 +157,8 @@ func renderTemplateWithResults(db Database, config *config, req *http.Request, w
 
 	for _, s := range config.Sources {
 		sources = append(sources, togglableSource{
-			Id:      s.Id,
-			Enabled: slices.Contains(src, s.Id),
+			ID:      s.ID,
+			Enabled: slices.Contains(src, s.ID),
 		})
 	}
 
@@ -170,17 +170,17 @@ func renderTemplateWithResults(db Database, config *config, req *http.Request, w
 
 	mappedResults := make([]searchResult, len(results))
 	for i, res := range results {
-		url, err := url.Parse(res.Url)
+		url, err := url.Parse(res.URL)
 
 		breadcrumbs := make([]breadcrumb, 0)
 		if err == nil {
-			breadcrumbs = append(breadcrumbs, breadcrumb{Url: url.Scheme + "://" + url.Host, Text: url.Host})
+			breadcrumbs = append(breadcrumbs, breadcrumb{URL: url.Scheme + "://" + url.Host, Text: url.Host})
 
 			for _, segment := range strings.Split(url.Path, "/") {
 				if len(strings.TrimSpace(segment)) == 0 {
 					continue
 				}
-				breadcrumbs = append(breadcrumbs, breadcrumb{Url: breadcrumbs[len(breadcrumbs)-1].Url + "/" + segment, Text: segment})
+				breadcrumbs = append(breadcrumbs, breadcrumb{URL: breadcrumbs[len(breadcrumbs)-1].URL + "/" + segment, Text: segment})
 			}
 		}
 
@@ -240,7 +240,7 @@ func serve(db Database, config *config) {
 				// https://htmx.org/docs/#response-headers
 				url := req.URL
 				url.Path = "/"
-				w.Header().Set("HX-Replace-Url", url.String())
+				w.Header().Set("HX-Replace-URL", url.String())
 			}
 
 			renderTemplateWithResults(db, config, req, w, t, "results")
@@ -299,7 +299,7 @@ func serve(db Database, config *config) {
 		}
 	})
 
-	addr := fmt.Sprintf("%v:%v", config.Http.Listen, config.Http.Port)
+	addr := fmt.Sprintf("%v:%v", config.HTTP.Listen, config.HTTP.Port)
 	fmt.Printf("Listening on http://%v\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

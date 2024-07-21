@@ -39,7 +39,7 @@ type Page struct {
 }
 
 type Result struct {
-	Url         string  `json:"url"`
+	URL         string  `json:"url"`
 	Title       []Match `json:"title"`
 	Description []Match `json:"description"`
 	Content     []Match `json:"content"`

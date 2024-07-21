@@ -7,14 +7,14 @@ import (
 )
 
 type config struct {
-	Http struct {
+	HTTP struct {
 		Listen string
 		Port   int16
-	}
-	Db struct {
+	} `yaml:"http"`
+	DB struct {
 		Driver           string
 		ConnectionString string `yaml:"connectionString"`
-	}
+	} `yaml:"db"`
 	Sources     []Source
 	ResultsPage ResultsPageConfig `yaml:"resultsPage"`
 }
@@ -29,9 +29,9 @@ type ResultsPageConfig struct {
 
 type Source struct {
 	// A unique identifier for this source. Used to distinguish between different sites if used with multiple tenants.
-	Id string
+	ID string `yaml:"id"`
 	// The URL of the site you want to build an index for.
-	Url string
+	URL string `yaml:"url"`
 	// The maximum amount of requests per minute that can be made to this source.
 	Speed int32
 
