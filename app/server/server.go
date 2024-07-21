@@ -188,11 +188,12 @@ func renderTemplateWithResults(db database.Database, config *config.Config, req 
 		})
 	}
 
-	pageCount := int(math.Ceil(float64(*total) / 10.0))
+	ceil := math.Ceil(float64(*total) / 10.0)
+	pageCount := uint32(math.Min(ceil, math.MaxUint32))
 	if pageCount < 1 {
 		pageCount = 1
 	}
-	pages := createPagination(req.URL, int(page), pageCount)
+	pages := createPagination(req.URL, uint32(page), pageCount)
 
 	mappedResults := make([]searchResult, len(results))
 	for i, res := range results {
