@@ -15,8 +15,8 @@ func TestPagination(t *testing.T) {
 	}
 
 	table := []struct {
-		page      int
-		pageCount int
+		page      int32
+		pageCount int32
 		want      []resultsPage
 	}{
 		// When the cursor is at the start
@@ -78,7 +78,7 @@ func TestPagination(t *testing.T) {
 	for i, testCase := range table {
 		actual := createPagination(url, testCase.page, testCase.pageCount)
 		if !reflect.DeepEqual(testCase.want, actual) {
-			t.Fatalf("test case %v failed: wanted %v, got %+v", i+1, testCase.want, actual)
+			t.Fatalf("test case %v failed: wanted %+v, got %+v", i+1, testCase.want, actual)
 		}
 	}
 }

@@ -19,7 +19,7 @@ func urlWithParam(url *url.URL, key string, value string) string {
 	return url.String()
 }
 
-func createPagination(url *url.URL, page uint32, pageCount uint32) []resultsPage {
+func createPagination(url *url.URL, page int32, pageCount int32) []resultsPage {
 	pages := make([]resultsPage, 0, int(math.Min(12, float64(pageCount+4))))
 
 	if pageCount == 1 {
@@ -40,8 +40,8 @@ func createPagination(url *url.URL, page uint32, pageCount uint32) []resultsPage
 	})
 
 	startIndex := page - 5
-
 	endIndex := page + 5
+
 	if startIndex < 0 {
 		startIndex = 0
 	}
