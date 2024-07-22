@@ -59,7 +59,7 @@ git clone https://github.com/FluxCapacitor2/easysearch
 2. Run the app locally:
 
 ```sh
-go run --tags="fts5" .
+go run --tags="fts5" ./app
 ```
 
 <small>
@@ -83,7 +83,7 @@ For Go source files, instead of Prettier, use `go fmt`. You can format the whole
 You can build a binary with this command:
 
 ```sh
-go build --tags "fts5" .
+go build --tags "fts5" -o easysearch ./app
 ```
 
 Then, you can run it like this:
@@ -92,7 +92,7 @@ Then, you can run it like this:
 $ ./easysearch
 ```
 
-If you're on Windows, the file name would be `easysearch.exe`.
+If you're on Windows, the file name would be `easysearch.exe` instead of `easysearch`.
 
 ## Building and Running with Docker
 
