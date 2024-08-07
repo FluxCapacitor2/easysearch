@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -181,9 +182,16 @@ type RawResult struct {
 	Content     string
 }
 
-// TODO: escape the search term. If it contains a . or unclosed quote, it triggers a syntax error and the query fails.
-//
-//	(see https://sqlite.org/fts5.html#full_text_query_syntax)
+var re = regexp.MustCompile(`\W`)
+
+func escape(searchTerm string) string {
+	// Split the search term into individual words (this step also removes double quotes from the input)
+	words := re.Split(searchTerm, -1)
+	// Surround each word with double quotes and add a * to match partial words at the end of the query
+	quoted := fmt.Sprintf("\"%s\"*", strings.Join(words, "\" \""))
+	return quoted
+}
+
 func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, pageSize uint32) ([]Result, *uint32, error) {
 
 	tx, err := db.conn.Begin()
@@ -216,7 +224,7 @@ func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, p
 	// Add the required status and search term as parameters
 	args = append(args,
 		Finished, // (as opposed to the Error or Unindexable states)
-		search,
+		escape(search),
 		pageSize,
 		(page-1)*pageSize,
 	)
