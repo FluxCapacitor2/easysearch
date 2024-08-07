@@ -82,6 +82,18 @@ input[type="submit"] {
   }
 }
 
+#results {
+  position: relative;
+}
+
+.htmx-indicator {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
 .inter-regular {
   font-family: "Inter", sans-serif;
   font-optical-sizing: auto;
