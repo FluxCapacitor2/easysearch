@@ -39,6 +39,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS canonical_source_url ON canonicals(source, url
 
 -- Create a full-text search table
 CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
+  -- TODO: see if I can omit the source and status columns here and use a join with the `pages` table instead while querying
+  -- TODO: also, does that make queries faster, since I can add indexes on the pages table? how do I create and read a SQLite explain plan?
     source UNINDEXED,
     status UNINDEXED,
 

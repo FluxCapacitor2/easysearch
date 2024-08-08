@@ -62,8 +62,16 @@ var re = regexp.MustCompile(`\W`)
 func escape(searchTerm string) string {
 	// Split the search term into individual words (this step also removes double quotes from the input)
 	words := re.Split(searchTerm, -1)
+
+	var filtered = make([]string, 0, len(words))
+	for _, word := range words {
+		if len(word) != 0 {
+			filtered = append(filtered, word)
+		}
+	}
+
 	// Surround each word with double quotes and add a * to match partial words at the end of the query
-	quoted := fmt.Sprintf("\"%s\"*", strings.Join(words, "\" \""))
+	quoted := fmt.Sprintf("\"%s\"*", strings.Join(filtered, "\" \""))
 	return quoted
 }
 
