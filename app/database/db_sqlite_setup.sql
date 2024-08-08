@@ -3,7 +3,7 @@ PRAGMA journal_mode = wal;
 
 CREATE TABLE IF NOT EXISTS crawl_queue(
     source TEXT NOT NULL,
-    url TEXT NOT NULL UNIQUE,
+    url TEXT NOT NULL,
     status INTEGER DEFAULT 0, -- Pending
     depth INTEGER,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS crawl_queue(
 -- When a canonical URL is discovered, it is cached in this table to prevent excessively querying the target
 CREATE TABLE IF NOT EXISTS canonicals(
     source TEXT NOT NULL,
-    url TEXT NOT NULL UNIQUE,
+    url TEXT NOT NULL,
     canonical TEXT NOT NULL,
     crawledAt DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -32,8 +32,10 @@ CREATE TABLE IF NOT EXISTS pages(
     content TEXT
 );
 
--- Ensure a page can only be added once per source
+-- Ensure a page can only be queued and/or indexed once per source and that pages can only have one canonical per source
+CREATE UNIQUE INDEX IF NOT EXISTS queue_source_url ON crawl_queue(source, url);
 CREATE UNIQUE INDEX IF NOT EXISTS page_source_url ON pages(source, url);
+CREATE UNIQUE INDEX IF NOT EXISTS canonical_source_url ON canonicals(source, url);
 
 -- Create a full-text search table
 CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(

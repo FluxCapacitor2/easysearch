@@ -16,8 +16,8 @@ type Database interface {
 	AddToQueue(source string, urls []string, depth int32) error
 	// Update the status of the item in the queue denoted by the specified url
 	UpdateQueueEntry(source string, url string, status QueueItemStatus) error
-	// Return the first item in the queue
-	GetFirstInQueue(source string) (*QueueItem, error)
+	// Sets the first item in the queue to `Processing` and returns it. If both the item and `error` is nil, the queue is empty OR another worker already claimed the row.
+	PopQueue(source string) (*QueueItem, error)
 	// Set the status of items that have been Processing for over 20 minutes to Pending and remove any Finished entries
 	CleanQueue() error
 	// Add pages older than `daysAgo` to the queue to be recrawled.

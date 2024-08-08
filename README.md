@@ -33,7 +33,7 @@ This is a FOSS alternative to the aforementioned products that addresses my prim
 - [ ] Build a common representation of query features (like AND, OR, exact matches, negation, fuzzy matches) and using it to build queries for the user's database driver
 - [x] Implementing something like Readability (or at least removing the contents of non-text resources)
 - [ ] SPA support using a headless browser
-- [ ] Distributed queue (the architecture might already work with multiple instances)
+- [x] Guarantee that pages in the queue are only crawled once, even in distributed scenarios
 - [ ] Postgres support
 - [ ] MySQL support
 - [ ] Prebuilt components for React, Vue, Svelte, etc.

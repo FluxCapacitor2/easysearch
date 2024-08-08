@@ -33,13 +33,10 @@ func (db *SQLiteDatabase) AddDocument(source string, depth int32, url string, st
 }
 
 func (db *SQLiteDatabase) HasDocument(source string, url string) (*bool, error) {
-	// TODO: SELECTing the URL is unnecessary. we can just use a "SELECT 1" and see if any rows were returned.
-	cursor := db.conn.QueryRow("SELECT url FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
+	cursor := db.conn.QueryRow("SELECT 1 FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
 
-	page := &Page{}
-	err := cursor.Scan(&page.URL)
-
-	exists := true
+	exists := false
+	err := cursor.Scan(&exists)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -199,8 +196,6 @@ func processResult(input string, start string, end string) []Match {
 
 func (db *SQLiteDatabase) AddToQueue(source string, urls []string, depth int32) error {
 
-	// https://news.ycombinator.com/item?id=27482402
-
 	tx, err := db.conn.Begin()
 
 	if err != nil {
@@ -208,8 +203,7 @@ func (db *SQLiteDatabase) AddToQueue(source string, urls []string, depth int32) 
 	}
 
 	for _, url := range urls {
-		// TODO: don't override depth if the existing value is lower
-		_, err := tx.Exec("REPLACE INTO crawl_queue (source, url, depth) VALUES (?, ?, ?)", source, url, depth)
+		_, err := tx.Exec("INSERT INTO crawl_queue (source, url, depth) VALUES (?, ?, ?) ON CONFLICT DO NOTHING;", source, url, depth)
 		if err != nil {
 			rbErr := tx.Rollback()
 			if rbErr != nil {
@@ -223,17 +217,16 @@ func (db *SQLiteDatabase) AddToQueue(source string, urls []string, depth int32) 
 	return err
 }
 
-func (db *SQLiteDatabase) UpdateQueueEntry(source string, url string, status QueueItemStatus) error {
-	// TODO: check for affected rows. if no rows were affected, then the update failed, potentially due to another instance updating the status at the same time.
-	_, err := db.conn.Exec("UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE source = ? AND url = ?", status, source, url)
-	return err
-}
-
-func (db *SQLiteDatabase) GetFirstInQueue(source string) (*QueueItem, error) {
-	cursor := db.conn.QueryRow("SELECT * FROM crawl_queue WHERE source = ? AND status = ? ORDER BY addedAt LIMIT 1", source, Pending)
+func (db *SQLiteDatabase) PopQueue(source string) (*QueueItem, error) {
+	// Find the first item in the queue and update it in one step. If the row isn't returned, another process must have updated it at the same time.
+	row := db.conn.QueryRow(`
+	  UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE rowid = (
+	    SELECT rowid FROM crawl_queue WHERE status = ? AND source = ? ORDER BY addedAt LIMIT 1
+	  ) RETURNING source, url, status, depth, addedAt, updatedAt;
+	`, Processing, Pending, source)
 
 	item := &QueueItem{}
-	err := cursor.Scan(&item.Source, &item.URL, &item.Status, &item.Depth, &item.AddedAt, &item.UpdatedAt)
+	err := row.Scan(&item.Source, &item.URL, &item.Status, &item.Depth, &item.AddedAt, &item.UpdatedAt)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -245,30 +238,31 @@ func (db *SQLiteDatabase) GetFirstInQueue(source string) (*QueueItem, error) {
 	return item, nil
 }
 
+func (db *SQLiteDatabase) UpdateQueueEntry(source string, url string, status QueueItemStatus) error {
+	if status == Finished {
+		// If the item is finished, it can be immediately deleted
+		_, err := db.conn.Exec("DELETE FROM crawl_queue WHERE source = ? AND url = ?", source, url)
+		return err
+	} else {
+		_, err := db.conn.Exec("UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE source = ? AND url = ?", status, source, url)
+		return err
+	}
+}
+
 func (db *SQLiteDatabase) CleanQueue() error {
-	// Clear all Finished queue items
-	{
-		_, err := db.conn.Exec("DELETE FROM crawl_queue WHERE status = ?", Finished)
+	_, err := db.conn.Exec(`
+		-- 1) Clear all Finished queue items (this is a sanity check; they should be immediately deleted from UpdateQueueEntry)
+		DELETE FROM crawl_queue WHERE status = ?;
 
-		if err != nil {
-			return err
-		}
-	}
+		-- 2) Mark items that have been Processing for >5 minutes as Pending again
+		UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE status = ? AND unixepoch() - unixepoch(updatedAt) > 5 * 60;
+		`, Finished, Pending, Processing)
 
-	// Mark items that have been Processing for >20 minutes as Pending again
-	{
-		_, err := db.conn.Exec("UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE status = ? AND unixepoch() - unixepoch(updatedAt) > 20 * 60", Pending, Processing)
-
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return err
 }
 
 func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) error {
-	rows, err := db.conn.Query("SELECT * FROM pages WHERE source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
+	rows, err := db.conn.Query("SELECT source, url, crawledAt, depth, status FROM pages WHERE source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
 
 	if err != nil {
 		return err
@@ -284,13 +278,10 @@ func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) erro
 			return err
 		}
 
-		{
+		err = db.AddToQueue(source, []string{row.URL}, row.Depth)
 
-			err := db.AddToQueue(source, []string{row.URL}, row.Depth)
-
-			if err != nil {
-				return err
-			}
+		if err != nil {
+			return err
 		}
 	}
 
@@ -298,7 +289,7 @@ func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) erro
 }
 
 func (db *SQLiteDatabase) GetCanonical(source string, url string) (*Canonical, error) {
-	cursor := db.conn.QueryRow("SELECT * FROM canonicals WHERE source = ? AND url = ?", source, url)
+	cursor := db.conn.QueryRow("SELECT original, canonical, crawledAt FROM canonicals WHERE source = ? AND url = ?", source, url)
 
 	canonical := &Canonical{}
 	err := cursor.Scan(&canonical.Original, &canonical.Canonical, &canonical.CrawledAt)
