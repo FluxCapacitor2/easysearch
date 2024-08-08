@@ -69,42 +69,40 @@ func Crawl(source config.Source, currentDepth int32, db database.Database, pageU
 			return
 		}
 
+		// Make sure the page doesn't disallow indexing
+		if robotsTag, exists := element.DOM.Find("meta[name=robots]").Attr("content"); exists {
+			if strings.Contains(robotsTag, "noindex") || strings.Contains(robotsTag, "none") {
+				return
+			}
+		}
+
 		article, err := readability.FromDocument(element.DOM.Get(0), parsedURL)
 		description, _ := element.DOM.Find("meta[name=description]").Attr("content")
 
-		{
-			metaCanonicalTag, exists := element.DOM.Find("link[rel=canonical]").Attr("href")
-
-			if exists {
-				canonical = metaCanonicalTag
-			}
+		if metaCanonicalTag, exists := element.DOM.Find("link[rel=canonical]").Attr("href"); exists {
+			canonical = metaCanonicalTag
 		}
 
-		{
-			// Find alternate links for RSS feeds, other languages, etc.
-			links := element.DOM.Find("link[rel=alternate]")
-			links.Each(func(i int, link *goquery.Selection) {
+		// Find alternate links for RSS feeds, other languages, etc.
+		linkTags := element.DOM.Find("link[rel=alternate]")
+		linkTags.Each(func(i int, link *goquery.Selection) {
 
-				linkType, exists := link.Attr("type")
+			linkType, exists := link.Attr("type")
 
-				if exists && (linkType == "application/atom+xml" || linkType == "application/rss+xml" || linkType == "text/html") {
-					href, exists := link.Attr("href")
-					if exists {
-						add(element.Request.AbsoluteURL(href))
-					}
+			if exists && (linkType == "application/atom+xml" || linkType == "application/rss+xml" || linkType == "text/html") {
+				href, exists := link.Attr("href")
+				if exists {
+					add(element.Request.AbsoluteURL(href))
 				}
-			})
-		}
+			}
+		})
 
 		title := strings.TrimSpace(element.DOM.Find("title").Text())
 
-		{
-			// If we can parse the Readability output as HTML, get the text content using our method.
-			// This will add spaces between HTML elements.
-			node, err := html.Parse(strings.NewReader(article.Content))
-			if err == nil {
-				article.TextContent = getText(node)
-			}
+		// If we can parse the Readability output as HTML, get the text content using our method.
+		// This will add spaces between HTML elements.
+		if node, err := html.Parse(strings.NewReader(article.Content)); err == nil {
+			article.TextContent = getText(node)
 		}
 
 		if err != nil || article.TextContent == "" {
