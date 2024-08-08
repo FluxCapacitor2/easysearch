@@ -28,7 +28,7 @@ func (db *SQLiteDatabase) Setup() error {
 }
 
 func (db *SQLiteDatabase) AddDocument(source string, depth int32, url string, status QueueItemStatus, title string, description string, content string) error {
-	_, err := db.conn.Exec("INSERT INTO pages (source, depth, status, url, title, description, content) VALUES (?, ?, ?, ?, ?, ?, ?);", source, depth, status, url, title, description, content)
+	_, err := db.conn.Exec("REPLACE INTO pages (source, depth, status, url, title, description, content) VALUES (?, ?, ?, ?, ?, ?, ?);", source, depth, status, url, title, description, content)
 	return err
 }
 
