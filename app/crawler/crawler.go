@@ -61,7 +61,13 @@ func Crawl(source config.Source, currentDepth int32, db database.Database, pageU
 		return nil
 	}
 
+	cancelled := false
+
 	collector.OnHTML("html", func(element *colly.HTMLElement) {
+
+		if cancelled {
+			return
+		}
 
 		article, err := readability.FromDocument(element.DOM.Get(0), parsedURL)
 		description, _ := element.DOM.Find("meta[name=description]").Attr("content")
@@ -125,6 +131,14 @@ func Crawl(source config.Source, currentDepth int32, db database.Database, pageU
 	collector.OnResponse(func(resp *colly.Response) {
 		// The crawler follows redirects, so the canonical should be updated to match the final URL.
 		canonical = resp.Request.URL.String()
+
+		{
+			if exists, _ := db.HasDocument(source.ID, canonical); exists != nil && *exists {
+				// If the crawler followed a redirect to a document that has already been indexed,
+				// parsing and adding it to the DB is unnecessary.
+				cancelled = true
+			}
+		}
 
 		ct := resp.Headers.Get("Content-Type")
 		// XML files could be sitemaps
