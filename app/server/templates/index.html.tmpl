@@ -50,7 +50,9 @@
                   type="checkbox"
                   name="source"
                   value="{{ $value.ID }}"
-                  checked="{{ $value.Enabled }}"
+                  {{ if $value.Enabled }}
+                    checked
+                  {{ end }}
                 />
                 {{ $value.ID }}
               </label>
