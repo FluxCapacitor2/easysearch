@@ -132,12 +132,10 @@ func Crawl(source config.Source, currentDepth int32, db database.Database, pageU
 		// The crawler follows redirects, so the canonical should be updated to match the final URL.
 		canonical = resp.Request.URL.String()
 
-		{
-			if exists, _ := db.HasDocument(source.ID, canonical); exists != nil && *exists {
-				// If the crawler followed a redirect to a document that has already been indexed,
-				// parsing and adding it to the DB is unnecessary.
-				cancelled = true
-			}
+		if exists, _ := db.HasDocument(source.ID, canonical); exists != nil && *exists {
+			// If the crawler followed a redirect to a document that has already been indexed,
+			// parsing and adding it to the DB is unnecessary.
+			cancelled = true
 		}
 
 		ct := resp.Headers.Get("Content-Type")
