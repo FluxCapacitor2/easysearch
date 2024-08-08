@@ -21,10 +21,10 @@ jobs:
           go-version: "1.22"
 
       - name: Build
-        run: go build -v -o easysearch ./app
+        run: go build --tags "fts5" -v -o easysearch ./app
 
       - name: Test
-        run: go test -v ./app/...
+        run: go test --tags "fts5" -v ./app/...
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
