@@ -109,14 +109,12 @@ func Crawl(source config.Source, currentDepth int32, db database.Database, pageU
 			for _, item := range element.DOM.Nodes {
 				content += getText(item)
 			}
-			_, err = db.AddDocument(source.ID, currentDepth, canonical, database.Finished, title, description, content)
+			err = db.AddDocument(source.ID, currentDepth, canonical, database.Finished, title, description, content)
 		} else {
-
 			if len(title) == 0 {
 				title = article.Title
 			}
-
-			_, err = db.AddDocument(source.ID, currentDepth, canonical, database.Finished, title, description, article.TextContent)
+			err = db.AddDocument(source.ID, currentDepth, canonical, database.Finished, title, description, article.TextContent)
 		}
 
 		if err != nil {

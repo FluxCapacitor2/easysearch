@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 
+	_ "embed"
+
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -17,146 +19,22 @@ type SQLiteDatabase struct {
 	conn *sql.DB
 }
 
+//go:embed db_sqlite_setup.sql
+var setupCommands string
+
 func (db *SQLiteDatabase) Setup() error {
-	{
-		// Enable write-ahead logging for improved write performance (https://www.sqlite.org/wal.html)
-		_, err := db.conn.Exec("PRAGMA journal_mode=WAL;")
-
-		if err != nil {
-			return err
-		}
-	}
-
-	// TODO: use a composite index on the `source` AND `url` column instead of making `url` globally unique
-
-	{
-		_, err := db.conn.Exec(`
-			CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5 (
-				source UNINDEXED,	
-				url,
-				title,
-				description,
-				content,
-				status UNINDEXED
-			)
-		`)
-
-		if err != nil {
-			return err
-		}
-	}
-
-	{
-		_, err := db.conn.Exec(`
-			CREATE TABLE IF NOT EXISTS pages (
-				source TEXT NOT NULL,
-				url TEXT NOT NULL UNIQUE,
-				crawledAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-				depth INTEGER NOT NULL,
-				status INTEGER NOT NULL
-			)
-		`)
-
-		if err != nil {
-
-			return err
-		}
-	}
-
-	{
-		_, err := db.conn.Exec(`
-			CREATE TABLE IF NOT EXISTS crawl_queue (
-				source TEXT NOT NULL,
-				url TEXT NOT NULL UNIQUE,
-				status INTEGER DEFAULT 0,
-				depth INTEGER,
-				addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-				updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
-			)
-		`)
-
-		if err != nil {
-			return err
-		}
-	}
-
-	{
-		_, err := db.conn.Exec(`
-			CREATE TABLE IF NOT EXISTS canonicals (
-			  source TEXT NOT NULL,
-			  url TEXT NOT NULL UNIQUE,
-			  canonical TEXT NOT NULL,
-			  crawledAt DATETIME DEFAULT CURRENT_TIMESTAMP
-			)
-		`)
-
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	_, err := db.conn.Exec(setupCommands)
+	return err
 }
 
-func (db *SQLiteDatabase) AddDocument(source string, depth int32, url string, status QueueItemStatus, title string, description string, content string) (*Page, error) {
-	tx, err := db.conn.Begin()
-
-	if err != nil {
-		fmt.Printf("Error starting transaction: %v\n", err)
-		return nil, err
-	}
-
-	// Remove old entries
-	{
-		_, err := tx.Exec(`
-		DELETE FROM crawl_queue WHERE source = ? AND url = ?;
-		DELETE FROM pages WHERE source = ? AND url = ?;
-		DELETE FROM pages_fts WHERE source = ? AND url = ?;
-		`, source, url, source, url, source, url)
-
-		if err != nil {
-			fmt.Printf("Error removing old entries: %v\n", err)
-			return nil, err
-		}
-	}
-
-	// Insert new records for the page (to prevent duplicates and record crawl time as a DATETIME) and the FTS entry (for user search queries)
-	{
-		_, err := tx.Exec("INSERT INTO pages (source, url, depth, status) VALUES (?, ?, ?, ?)", source, url, depth, status)
-		if err != nil {
-			fmt.Printf("Error inserting new page: %v\n", err)
-			return nil, err
-		}
-	}
-
-	result := tx.QueryRow("INSERT INTO pages_fts (source, url, title, description, content, status) VALUES (?, ?, ?, ?, ?, ?) RETURNING *", source, url, title, description, content, status)
-
-	// Return the newly-inserted row
-	row := &Page{}
-
-	{
-		err := result.Scan(&row.Source, &row.URL, &row.Title, &row.Description, &row.Content, &row.Status)
-
-		if err != nil {
-			fmt.Printf("Error scanning inserted row: %v\n", err)
-			return nil, err
-		}
-	}
-
-	{
-		err := tx.Commit()
-		if err != nil {
-			fmt.Printf("Error inserting new FTS entry: %v\n", err)
-			return nil, err
-		}
-	}
-
-	return row, nil
+func (db *SQLiteDatabase) AddDocument(source string, depth int32, url string, status QueueItemStatus, title string, description string, content string) error {
+	_, err := db.conn.Exec("INSERT INTO pages (source, depth, status, url, title, description, content) VALUES (?, ?, ?, ?, ?, ?, ?);", source, depth, status, url, title, description, content)
+	return err
 }
 
 func (db *SQLiteDatabase) HasDocument(source string, url string) (*bool, error) {
 	// TODO: SELECTing the URL is unnecessary. we can just use a "SELECT 1" and see if any rows were returned.
-	cursor := db.conn.QueryRow("SELECT url FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?))", source, url, url)
+	cursor := db.conn.QueryRow("SELECT url FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
 
 	page := &Page{}
 	err := cursor.Scan(&page.URL)
@@ -205,9 +83,9 @@ func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, p
 	query := fmt.Sprintf(`SELECT 
 			rank,
 			url,
-			highlight(pages_fts, 2, ?, ?) title,
-			snippet(pages_fts, 3, ?, ?, '…', 8) description,
-			snippet(pages_fts, 4, ?, ?, '…', 24) content
+			highlight(pages_fts, 3, ?, ?) title,
+			snippet(pages_fts, 4, ?, ?, '…', 8) description,
+			snippet(pages_fts, 5, ?, ?, '…', 24) content
 		FROM pages_fts WHERE source IN (%s) AND status = ? AND pages_fts MATCH ? ORDER BY rank LIMIT ? OFFSET ?;
 		`, strings.Repeat("?, ", len(sources)-1)+"?")
 

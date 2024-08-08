@@ -5,7 +5,7 @@ type Database interface {
 	Setup() error
 
 	// Add a page to the search index.
-	AddDocument(source string, depth int32, url string, status QueueItemStatus, title string, description string, content string) (*Page, error)
+	AddDocument(source string, depth int32, url string, status QueueItemStatus, title string, description string, content string) error
 	// Returns whether the given URL (or the URL's canonical) is indexed
 	HasDocument(source string, url string) (*bool, error)
 

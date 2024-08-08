@@ -14,6 +14,7 @@ import (
 )
 
 // TODO: look into dependency injection instead of passing the DB and config into every function call
+// TODO: add a command-line option to rebuild the search index (https://sqlite.org/fts5.html#the_rebuild_command)
 
 func main() {
 
@@ -74,7 +75,7 @@ func startCrawl(db database.Database, config *config.Config) {
 		exists, err := db.HasDocument(src.ID, src.URL)
 
 		if err != nil {
-			fmt.Printf("Failed to look up document %v in pages table\n", err)
+			fmt.Printf("Failed to look up document '%v'/'%v' in pages table: %v\n", src.ID, src.URL, err)
 		} else {
 			if !*exists {
 				// If the document wasn't found, it should be added to the queue
@@ -136,7 +137,7 @@ func consumeQueue(db database.Database, config *config.Config) {
 
 					// Add an entry to the pages table to prevent immediately recrawling the same URL when referred from other sources
 					if result != nil {
-						_, err := db.AddDocument(src.ID, item.Depth, result.Canonical, database.Error, "", "", "")
+						err := db.AddDocument(src.ID, item.Depth, result.Canonical, database.Error, "", "", "")
 						if err != nil {
 							fmt.Printf("Failed to add page in 'error' state: %v\n", err)
 						}
