@@ -8,6 +8,8 @@ import (
 	"github.com/fluxcapacitor2/easysearch/app/crawler"
 	"github.com/fluxcapacitor2/easysearch/app/database"
 	"github.com/fluxcapacitor2/easysearch/app/server"
+	"github.com/go-co-op/gocron/v2"
+	"github.com/google/uuid"
 )
 
 // TODO: look into dependency injection instead of passing the DB and config into every function call
@@ -21,6 +23,10 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Invalid configuration: %v", err))
 	}
+
+	gocron.AfterJobRunsWithPanic(func(jobID uuid.UUID, jobName string, recoverData interface{}) {
+		fmt.Printf("Panic in job %v (ID: %v): %+v\n", jobName, jobID, recoverData)
+	})
 
 	// Set up a database connection using the specified driver
 	var db database.Database
