@@ -9,7 +9,6 @@
 
 button,
 input[type="submit"] {
-  height: 100%;
   padding-inline: 1rem;
   padding-block: 0.5rem;
   border: 1px solid lightgray;
@@ -21,6 +20,10 @@ input[type="submit"] {
   &:hover {
     background-color: rgba(0, 0, 0, 0.05);
   }
+}
+
+.search-button {
+  height: 100%;
 }
 
 .breadcrumbs {
