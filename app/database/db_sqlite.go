@@ -85,13 +85,19 @@ func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, p
 	start := uuid.New().String()
 	end := uuid.New().String()
 
-	query := fmt.Sprintf(`SELECT 
-			rank,
-			url,
-			highlight(pages_fts, 3, ?, ?) title,
-			snippet(pages_fts, 4, ?, ?, '…', 8) description,
-			snippet(pages_fts, 5, ?, ?, '…', 24) content
-		FROM pages_fts WHERE source IN (%s) AND status = ? AND pages_fts MATCH ? ORDER BY rank LIMIT ? OFFSET ?;
+	query := fmt.Sprintf(`
+		SELECT 
+			pages_fts.rank,
+			pages_fts.url,
+			highlight(pages_fts, 1, ?, ?) AS title,
+			snippet(pages_fts, 2, ?, ?, '…', 8) AS description,
+			snippet(pages_fts, 3, ?, ?, '…', 24) AS content
+		FROM pages
+		JOIN pages_fts ON pages.rowid = pages_fts.rowid
+		WHERE pages.source IN (%s)
+			AND pages.status = ?
+			AND pages_fts MATCH ?
+		ORDER BY rank LIMIT ? OFFSET ?;
 		`, strings.Repeat("?, ", len(sources)-1)+"?")
 
 	// Convert the sources (a []string) into a slice of type []any by manually copying each element
@@ -142,7 +148,7 @@ func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, p
 	var total *uint32
 	{
 		cursor := tx.QueryRow(
-			fmt.Sprintf("SELECT COUNT(*) FROM pages_fts WHERE source IN (%s) AND status = ? AND pages_fts MATCH ?", strings.Repeat("?, ", len(sources)-1)+"?"), args[6:8+len(sources)]...)
+			fmt.Sprintf("SELECT COUNT(*) FROM pages JOIN pages_fts ON pages.rowid = pages_fts.rowid WHERE pages.source IN (%s) AND pages.status = ? AND pages_fts MATCH ?", strings.Repeat("?, ", len(sources)-1)+"?"), args[6:8+len(sources)]...)
 		err := cursor.Scan(&total)
 		if err != nil {
 			return nil, nil, err
