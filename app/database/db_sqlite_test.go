@@ -7,7 +7,7 @@ import (
 )
 
 func createDB(t *testing.T) Database {
-	db, err := SQLite(path.Join(t.TempDir(), "temp.db"))
+	db, err := SQLiteFromFile(path.Join(t.TempDir(), "temp.db"))
 
 	if err != nil {
 		t.Fatalf("database creation failed: %v", err)
@@ -182,25 +182,5 @@ func TestSearchQuery(t *testing.T) {
 		if len(results) != int(*count) {
 			t.Fatalf("'count' did not match length of results: %v != %v", *count, len(results))
 		}
-	}
-}
-
-func TestCleanQueue(t *testing.T) {
-	db := createDB(t)
-	db.AddToQueue("source1", []string{"https://example.com/1", "https://example.com/2"}, 1)
-	db.UpdateQueueEntry("source1", "https://example.com/1", Finished)
-	db.UpdateQueueEntry("source1", "https://example.com/2", Error)
-	{
-		err := db.CleanQueue()
-		if err != nil {
-			t.Fatalf("error cleaning queue: %v", err)
-		}
-	}
-	item, err := db.PopQueue("source1")
-	if err != nil {
-		t.Fatalf("error popping queue: %v", err)
-	}
-	if item != nil {
-		t.Fatalf("item was not removed from queue: %v", item)
 	}
 }

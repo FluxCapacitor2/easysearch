@@ -33,7 +33,7 @@ func main() {
 
 	switch config.DB.Driver {
 	case "sqlite":
-		sqlite, err := database.SQLite(config.DB.ConnectionString)
+		sqlite, err := database.SQLiteFromFile(config.DB.ConnectionString)
 		if err != nil {
 			panic(fmt.Sprintf("Error opening SQLite database: %v", err))
 		}

@@ -319,12 +319,16 @@ func (db *SQLiteDatabase) SetCanonical(source string, url string, canonical stri
 	return err
 }
 
-func SQLite(fileName string) (*SQLiteDatabase, error) {
+func SQLiteFromFile(fileName string) (*SQLiteDatabase, error) {
 	conn, err := sql.Open("sqlite3", fileName)
 
 	if err != nil {
 		return nil, err
 	}
 
+	return &SQLiteDatabase{conn}, nil
+}
+
+func SQLite(conn *sql.DB) (*SQLiteDatabase, error) {
 	return &SQLiteDatabase{conn}, nil
 }
