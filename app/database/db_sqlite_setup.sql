@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS crawl_queue(
     depth INTEGER,
     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+) STRICT;
 
 -- When a canonical URL is discovered, it is cached in this table to prevent excessively querying the target
 CREATE TABLE IF NOT EXISTS canonicals(
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS canonicals(
     url TEXT NOT NULL,
     canonical TEXT NOT NULL,
     crawledAt DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+) STRICT;
 
 -- After a page is crawled, it is added to this table
 CREATE TABLE IF NOT EXISTS pages(    
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS pages(
     title TEXT,
     description TEXT,
     content TEXT
-);
+) STRICT;
 
 -- Ensure a page can only be queued and/or indexed once per source and that pages can only have one canonical per source
 CREATE UNIQUE INDEX IF NOT EXISTS queue_source_url ON crawl_queue(source, url);
