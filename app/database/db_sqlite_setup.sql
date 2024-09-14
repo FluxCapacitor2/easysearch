@@ -1,13 +1,17 @@
--- Enable write-ahead logging for improved write performance (https://www.sqlite.org/wal.html)
-PRAGMA journal_mode = wal;
+-- https://kerkour.com/sqlite-for-servers
+PRAGMA journal_mode = WAL;
+PRAGMA busy_timeout = 5000;
+PRAGMA synchronous = NORMAL;
+PRAGMA cache_size = 1000000000;
+PRAGMA temp_store = memory;
 
 CREATE TABLE IF NOT EXISTS crawl_queue(
     source TEXT NOT NULL,
     url TEXT NOT NULL,
     status INTEGER DEFAULT 0, -- Pending
     depth INTEGER,
-    addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    addedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
 ) STRICT;
 
 -- When a canonical URL is discovered, it is cached in this table to prevent excessively querying the target
@@ -15,14 +19,14 @@ CREATE TABLE IF NOT EXISTS canonicals(
     source TEXT NOT NULL,
     url TEXT NOT NULL,
     canonical TEXT NOT NULL,
-    crawledAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    crawledAt TEXT DEFAULT CURRENT_TIMESTAMP
 ) STRICT;
 
 -- After a page is crawled, it is added to this table
 CREATE TABLE IF NOT EXISTS pages(    
     source TEXT NOT NULL,
 
-    crawledAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    crawledAt TEXT DEFAULT CURRENT_TIMESTAMP,
     depth INTEGER NOT NULL,
     status INTEGER NOT NULL,
 
