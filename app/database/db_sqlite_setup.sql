@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS canonicals(
 ) STRICT;
 
 -- After a page is crawled, it is added to this table
-CREATE TABLE IF NOT EXISTS pages(    
+CREATE TABLE IF NOT EXISTS pages(
     source TEXT NOT NULL,
 
     crawledAt TEXT DEFAULT CURRENT_TIMESTAMP,

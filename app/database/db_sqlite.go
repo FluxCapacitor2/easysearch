@@ -97,7 +97,7 @@ func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, p
 		WHERE pages.source IN (%s)
 			AND pages.status = ?
 			AND pages_fts MATCH ?
-		ORDER BY rank LIMIT ? OFFSET ?;
+		ORDER BY bm25(pages_fts, 1.0, 3.0, 0.8, 1.0) LIMIT ? OFFSET ?;
 		`, strings.Repeat("?, ", len(sources)-1)+"?")
 
 	// Convert the sources (a []string) into a slice of type []any by manually copying each element
