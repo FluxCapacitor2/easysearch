@@ -38,16 +38,15 @@ func Crawl(source config.Source, currentDepth int32, db database.Database, pageU
 	if err != nil {
 		return nil, err
 	}
-	pageURL = parsedURL.String()
 
-	fmt.Printf("Crawling URL: %v\n", pageURL)
+	canonical := parsedURL.String()
+
+	fmt.Printf("Crawling URL: %v\n", canonical)
 	collector := colly.NewCollector()
 	collector.IgnoreRobotsTxt = false
 	collector.AllowedDomains = source.AllowedDomains
 
 	urls := map[string]struct{}{}
-
-	canonical := pageURL
 
 	add := func(urlStr string) error {
 		parsed, err := url.Parse(urlStr)
@@ -172,7 +171,7 @@ func Crawl(source config.Source, currentDepth int32, db database.Database, pageU
 		add(href)
 	})
 
-	err = collector.Visit(pageURL)
+	err = collector.Visit(canonical)
 
 	collector.Wait()
 
