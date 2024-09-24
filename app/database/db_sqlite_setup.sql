@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS crawl_queue(
     url TEXT NOT NULL,
     status INTEGER DEFAULT 0, -- Pending
     depth INTEGER,
+    referrer TEXT,
     addedAt TEXT DEFAULT CURRENT_TIMESTAMP,
     updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
 ) STRICT;
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS pages(
 
     crawledAt TEXT DEFAULT CURRENT_TIMESTAMP,
     depth INTEGER NOT NULL,
+    referrer TEXT,
     status INTEGER NOT NULL,
 
     url TEXT NOT NULL,

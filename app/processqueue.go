@@ -50,7 +50,7 @@ func crawlFirstInQueue(db database.Database, src config.Source) {
 	}
 	if item != nil {
 		// The `item` is nil when there are no items in the queue
-		result, err := crawler.Crawl(src, item.Depth, db, item.URL)
+		result, err := crawler.Crawl(src, item.Depth, item.Referrer, db, item.URL)
 
 		if err != nil {
 			// Mark the queue entry as errored
@@ -65,7 +65,7 @@ func crawlFirstInQueue(db database.Database, src config.Source) {
 			// Add an entry to the pages table to prevent immediately recrawling the same URL when referred from other sources.
 			// Additionally, if refresh is enabled, another crawl attempt will be made after the refresh interval passes.
 			if result != nil {
-				err := db.AddDocument(src.ID, item.Depth, result.Canonical, database.Error, "", "", "")
+				err := db.AddDocument(src.ID, item.Depth, item.Referrer, result.Canonical, database.Error, "", "", "")
 				if err != nil {
 					fmt.Printf("Failed to add page in 'error' state: %v\n", err)
 				}
@@ -87,7 +87,7 @@ func crawlFirstInQueue(db database.Database, src config.Source) {
 		filtered := filterURLs(db, src, result.URLs)
 
 		if item.Depth+1 <= src.MaxDepth {
-			err := db.AddToQueue(src.ID, filtered, item.Depth+1)
+			err := db.AddToQueue(src.ID, result.Canonical, filtered, item.Depth+1)
 			if err != nil {
 				fmt.Printf("Error adding URLs to queue: %v\n", err)
 			}

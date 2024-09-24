@@ -46,7 +46,7 @@ func TestEscape(t *testing.T) {
 func TestPopQueue(t *testing.T) {
 	db := createDB(t)
 
-	db.AddToQueue("source1", []string{"https://example.com/"}, 1)
+	db.AddToQueue("source1", "https://www.bswanson.dev", []string{"https://example.com/"}, 1)
 
 	// The first time, there should be an item to pop off the queue
 	{
@@ -78,7 +78,7 @@ func TestPopQueue(t *testing.T) {
 func TestPopQueueWithOtherSource(t *testing.T) {
 	db := createDB(t)
 
-	db.AddToQueue("source1", []string{"https://example.com/"}, 1)
+	db.AddToQueue("source1", "https://www.bswanson.dev", []string{"https://example.com/"}, 1)
 
 	res, err := db.PopQueue("source2")
 
@@ -136,7 +136,7 @@ func TestProcessResultEmptyEnd(t *testing.T) {
 func TestHasDocument(t *testing.T) {
 	db := createDB(t)
 
-	db.AddDocument("source1", 1, "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.")
+	db.AddDocument("source1", 1, "", "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.")
 
 	res, err := db.HasDocument("source1", "https://example.com/")
 	if err != nil {
@@ -151,7 +151,7 @@ func TestHasDocument(t *testing.T) {
 func TestSearchQuery(t *testing.T) {
 	db := createDB(t)
 
-	err := db.AddDocument("source1", 1, "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.")
+	err := db.AddDocument("source1", 1, "", "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.")
 	if err != nil {
 		t.Fatalf("error adding document: %v", err)
 	}

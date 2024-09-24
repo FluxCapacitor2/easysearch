@@ -27,8 +27,8 @@ func (db *SQLiteDatabase) Setup() error {
 	return err
 }
 
-func (db *SQLiteDatabase) AddDocument(source string, depth int32, url string, status QueueItemStatus, title string, description string, content string) error {
-	_, err := db.conn.Exec("REPLACE INTO pages (source, depth, status, url, title, description, content) VALUES (?, ?, ?, ?, ?, ?, ?);", source, depth, status, url, title, description, content)
+func (db *SQLiteDatabase) AddDocument(source string, depth int32, referrer string, url string, status QueueItemStatus, title string, description string, content string) error {
+	_, err := db.conn.Exec("REPLACE INTO pages (source, depth, referrer, status, url, title, description, content) VALUES (?, ?, ?, ?, ?, ?, ?, ?);", source, depth, referrer, status, url, title, description, content)
 	return err
 }
 
@@ -208,7 +208,7 @@ func processResult(input string, start string, end string) []Match {
 	}
 }
 
-func (db *SQLiteDatabase) AddToQueue(source string, urls []string, depth int32) error {
+func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []string, depth int32) error {
 
 	tx, err := db.conn.Begin()
 
@@ -217,7 +217,7 @@ func (db *SQLiteDatabase) AddToQueue(source string, urls []string, depth int32) 
 	}
 
 	for _, url := range urls {
-		_, err := tx.Exec("INSERT INTO crawl_queue (source, url, depth) VALUES (?, ?, ?) ON CONFLICT DO NOTHING;", source, url, depth)
+		_, err := tx.Exec("INSERT INTO crawl_queue (source, referrer, url, depth) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING;", source, referrer, url, depth)
 		if err != nil {
 			rbErr := tx.Rollback()
 			if rbErr != nil {
@@ -236,11 +236,11 @@ func (db *SQLiteDatabase) PopQueue(source string) (*QueueItem, error) {
 	row := db.conn.QueryRow(`
 	  UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE rowid = (
 	    SELECT rowid FROM crawl_queue WHERE status = ? AND source = ? ORDER BY addedAt LIMIT 1
-	  ) RETURNING source, url, status, depth, addedAt, updatedAt;
+	  ) RETURNING source, referrer, url, status, depth, addedAt, updatedAt;
 	`, Processing, Pending, source)
 
 	item := &QueueItem{}
-	err := row.Scan(&item.Source, &item.URL, &item.Status, &item.Depth, &item.AddedAt, &item.UpdatedAt)
+	err := row.Scan(&item.Source, &item.Referrer, &item.URL, &item.Status, &item.Depth, &item.AddedAt, &item.UpdatedAt)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -276,7 +276,7 @@ func (db *SQLiteDatabase) CleanQueue() error {
 }
 
 func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) error {
-	rows, err := db.conn.Query("SELECT source, url, crawledAt, depth, status FROM pages WHERE source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
+	rows, err := db.conn.Query("SELECT source, referrer, url, crawledAt, depth, status FROM pages WHERE source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
 
 	if err != nil {
 		return err
@@ -286,13 +286,13 @@ func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) erro
 
 		row := &Page{}
 
-		err := rows.Scan(&row.Source, &row.URL, &row.CrawledAt, &row.Depth, &row.Status)
+		err := rows.Scan(&row.Source, &row.Referrer, &row.URL, &row.CrawledAt, &row.Depth, &row.Status)
 
 		if err != nil {
 			return err
 		}
 
-		err = db.AddToQueue(source, []string{row.URL}, row.Depth)
+		err = db.AddToQueue(source, row.Referrer, []string{row.URL}, row.Depth)
 
 		if err != nil {
 			return err
