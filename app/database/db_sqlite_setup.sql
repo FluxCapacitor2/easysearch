@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS pages(
     crawledAt TEXT DEFAULT CURRENT_TIMESTAMP,
     depth INTEGER NOT NULL,
     referrer TEXT,
+    errorInfo TEXT,
     status INTEGER NOT NULL,
 
     url TEXT NOT NULL,

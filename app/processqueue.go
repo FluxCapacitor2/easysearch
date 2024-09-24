@@ -65,7 +65,7 @@ func crawlFirstInQueue(db database.Database, src config.Source) {
 			// Add an entry to the pages table to prevent immediately recrawling the same URL when referred from other sources.
 			// Additionally, if refresh is enabled, another crawl attempt will be made after the refresh interval passes.
 			if result != nil {
-				err := db.AddDocument(src.ID, item.Depth, item.Referrer, result.Canonical, database.Error, "", "", "")
+				err := db.AddDocument(src.ID, item.Depth, item.Referrer, result.Canonical, database.Error, "", "", "", err.Error())
 				if err != nil {
 					fmt.Printf("Failed to add page in 'error' state: %v\n", err)
 				}

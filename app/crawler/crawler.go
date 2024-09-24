@@ -112,12 +112,12 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 			for _, item := range element.DOM.Nodes {
 				content += getText(item)
 			}
-			err = db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Finished, title, description, content)
+			err = db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Finished, title, description, content, "")
 		} else {
 			if len(title) == 0 {
 				title = article.Title
 			}
-			err = db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Finished, title, description, article.TextContent)
+			err = db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Finished, title, description, article.TextContent, "")
 		}
 
 		if err != nil {
@@ -162,7 +162,7 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 
 		if len(urls) > 0 { // <- This will be true if URLs were found *before* an HTML document was parsed, which only happens for sitemaps/feeds.
 			// This page is a sitemap. Insert an "unindexable" document, which records that this document has been crawled, but has no text content of its own.
-			db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Unindexable, "", "", "")
+			db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Unindexable, "", "", "", "")
 		}
 	})
 
