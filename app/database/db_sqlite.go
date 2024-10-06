@@ -32,6 +32,11 @@ func (db *SQLiteDatabase) AddDocument(source string, depth int32, referrer strin
 	return err
 }
 
+func (db *SQLiteDatabase) RemoveDocument(source string, url string) error {
+	_, err := db.conn.Exec("DELETE FROM pages WHERE source = ? AND url = ?;", source, url)
+	return err
+}
+
 func (db *SQLiteDatabase) HasDocument(source string, url string) (*bool, error) {
 	cursor := db.conn.QueryRow("SELECT 1 FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
 
@@ -320,12 +325,15 @@ func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) erro
 }
 
 func (db *SQLiteDatabase) GetCanonical(source string, url string) (*Canonical, error) {
-	cursor := db.conn.QueryRow("SELECT original, canonical, crawledAt FROM canonicals WHERE source = ? AND url = ?", source, url)
+	cursor := db.conn.QueryRow("SELECT url, canonical, crawledAt FROM canonicals WHERE source = ? AND url = ?", source, url)
 
 	canonical := &Canonical{}
 	err := cursor.Scan(&canonical.Original, &canonical.Canonical, &canonical.CrawledAt)
 
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return canonical, nil

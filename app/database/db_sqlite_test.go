@@ -178,6 +178,32 @@ func TestGetDocument(t *testing.T) {
 	}
 }
 
+func TestDeleteCanonicalsOnDeletePage(t *testing.T) {
+	db := createDB(t)
+
+	err := db.AddDocument("source1", 0, "", "https://example.com/", Finished, "Title", "Description", "Content", "")
+	if err != nil {
+		t.Fatalf("failed to add page: %v", err)
+	}
+	err = db.SetCanonical("source1", "https://www.example.com/", "https://example.com/")
+	if err != nil {
+		t.Fatalf("failed to set canonical: %v", err)
+	}
+	err = db.RemoveDocument("source1", "https://example.com/")
+	if err != nil {
+		t.Fatalf("failed to delete document: %v", err)
+	}
+
+	canonical, err := db.GetCanonical("source1", "https://www.example.com/")
+	if err != nil {
+		t.Fatalf("failed to get canonical: %v", err)
+	}
+
+	if canonical != nil {
+		t.Fatalf("canonical was not deleted: expected nil, got %+v", canonical)
+	}
+}
+
 func TestSearchQuery(t *testing.T) {
 	db := createDB(t)
 

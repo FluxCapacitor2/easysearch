@@ -215,7 +215,11 @@ func getText(node *html.Node) string {
 func Canonicalize(src string, db database.Database, url *url.URL) (*url.URL, error) {
 
 	// Check if we already have a canonical URL recorded
-	canonical, _ := db.GetCanonical(src, url.String())
+	canonical, err := db.GetCanonical(src, url.String())
+
+	if err != nil {
+		return nil, err
+	}
 
 	if canonical != nil {
 		return url.Parse(canonical.Canonical)

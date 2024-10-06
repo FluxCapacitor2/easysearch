@@ -10,6 +10,8 @@ type Database interface {
 	HasDocument(source string, url string) (*bool, error)
 	// Fetch the document by URL (or the URL's canonical)
 	GetDocument(source string, url string) (*Page, error)
+	// Delete a document by its URL and remove all canonicals pointing to it
+	RemoveDocument(source string, url string) error
 
 	// Run a fulltext search with the given query
 	Search(sources []string, query string, page uint32, pageSize uint32) ([]Result, *uint32, error)

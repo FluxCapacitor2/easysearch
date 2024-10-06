@@ -55,6 +55,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
     content=pages
 );
 
+-- When a page is deleted, delete its canonicals too
+CREATE TRIGGER IF NOT EXISTS delete_page_canonicals_on_page_delete AFTER DELETE ON pages BEGIN
+  DELETE FROM canonicals WHERE source = old.source AND canonical = old.url;
+END;
+
 -- Use triggers to automatically sync the FTS table with the content table
 -- https://sqlite.org/fts5.html#external_content_tables
 CREATE TRIGGER IF NOT EXISTS pages_auto_insert AFTER INSERT ON pages BEGIN
