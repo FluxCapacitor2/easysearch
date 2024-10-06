@@ -53,7 +53,7 @@ func Start(db database.Database, config *config.Config) {
 
 		http.HandleFunc("/results", func(w http.ResponseWriter, req *http.Request) {
 			// This endpoint returns results as HTML to be used on the index page (/).
-			// It is called by Alpine.js to show search results without a full page reload.
+			// It is called by HTMX to show search results without a full page reload.
 
 			if req.Header.Get("HX-Request") != "" {
 				// ^ This request was made with HTMX. Update the URL shown in the address bar to match the most recent query params.

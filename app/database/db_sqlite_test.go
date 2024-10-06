@@ -145,7 +145,37 @@ func TestHasDocument(t *testing.T) {
 	if !*res {
 		t.Fatalf("document was not added to database: hasDocument returned false")
 	}
+}
 
+func TestGetDocument(t *testing.T) {
+	db := createDB(t)
+
+	page := Page{
+		Source:      "source1",
+		Referrer:    "",
+		URL:         "https://example.com/",
+		Title:       "Example Domain",
+		Description: "",
+		Content:     "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.",
+		Depth:       1,
+		Status:      Finished,
+		ErrorInfo:   "",
+	}
+
+	db.AddDocument(page.Source, page.Depth, page.Referrer, page.URL, page.Status, page.Title, page.Description, page.Content, page.ErrorInfo)
+
+	doc, err := db.GetDocument("source1", "https://example.com/")
+	if err != nil {
+		t.Fatalf("error fetching document: %v", err)
+	}
+	if doc == nil {
+		t.Fatalf("document was not added to database: hasDocument returned false")
+	}
+	doc.CrawledAt = "" // We don't want to compare CrawledAt because it's generated when the row is added
+
+	if !reflect.DeepEqual(page, *doc) {
+		t.Fatalf("document was improperly added or retrieved from the database: expected %v, got %v", page, doc)
+	}
 }
 
 func TestSearchQuery(t *testing.T) {

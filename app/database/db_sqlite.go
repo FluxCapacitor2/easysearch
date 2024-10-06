@@ -49,6 +49,23 @@ func (db *SQLiteDatabase) HasDocument(source string, url string) (*bool, error) 
 	return &exists, nil
 }
 
+func (db *SQLiteDatabase) GetDocument(source string, url string) (*Page, error) {
+	cursor := db.conn.QueryRow("SELECT source, referrer, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
+
+	page := Page{}
+	err := cursor.Scan(&page.Source, &page.Referrer, &page.URL, &page.Title, &page.Description, &page.Content, &page.Depth, &page.CrawledAt, &page.Status, &page.ErrorInfo)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	return &page, nil
+}
+
 type RawResult struct {
 	Rank        float64
 	URL         string

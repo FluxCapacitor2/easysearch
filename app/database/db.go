@@ -8,6 +8,8 @@ type Database interface {
 	AddDocument(source string, depth int32, referrer string, url string, status QueueItemStatus, title string, description string, content string, errorInfo string) error
 	// Returns whether the given URL (or the URL's canonical) is indexed
 	HasDocument(source string, url string) (*bool, error)
+	// Fetch the document by URL (or the URL's canonical)
+	GetDocument(source string, url string) (*Page, error)
 
 	// Run a fulltext search with the given query
 	Search(sources []string, query string, page uint32, pageSize uint32) ([]Result, *uint32, error)
@@ -28,16 +30,16 @@ type Database interface {
 }
 
 type Page struct {
-	Source      string
-	Referrer    string
-	URL         string
-	Title       string
-	Description string
-	Content     string
-	Depth       int32
-	CrawledAt   string
-	Status      QueueItemStatus
-	ErrorInfo   string
+	Source      string          `json:"source"`
+	Referrer    string          `json:"referrer"`
+	URL         string          `json:"url"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Content     string          `json:"content"`
+	Depth       int32           `json:"depth"`
+	CrawledAt   string          `json:"crawledAt"`
+	Status      QueueItemStatus `json:"status"`
+	ErrorInfo   string          `json:"error"`
 }
 
 type Result struct {
