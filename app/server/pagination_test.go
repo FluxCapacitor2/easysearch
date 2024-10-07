@@ -17,11 +17,11 @@ func TestPagination(t *testing.T) {
 	table := []struct {
 		page      int32
 		pageCount int32
-		want      []resultsPage
+		want      []ResultsPage
 	}{
 		// When the cursor is at the start
 		{page: 1, pageCount: 10,
-			want: []resultsPage{
+			want: []ResultsPage{
 				{Number: "«", Current: true, URL: "http://localhost:8080/?page=1&q=hello&source=test"},
 				{Number: "←", Current: true, URL: "http://localhost:8080/?page=0&q=hello&source=test"},
 				{Number: "1", Current: true, URL: "http://localhost:8080/?page=1&q=hello&source=test"},
@@ -39,7 +39,7 @@ func TestPagination(t *testing.T) {
 			}},
 		// Cursor in the middle of the results
 		{page: 5, pageCount: 20,
-			want: []resultsPage{
+			want: []ResultsPage{
 				{Number: "«", Current: false, URL: "http://localhost:8080/?page=1&q=hello&source=test"},
 				{Number: "←", Current: false, URL: "http://localhost:8080/?page=4&q=hello&source=test"},
 				{Number: "1", Current: false, URL: "http://localhost:8080/?page=1&q=hello&source=test"},
@@ -57,7 +57,7 @@ func TestPagination(t *testing.T) {
 			}},
 		// Cursor at the end
 		{page: 20, pageCount: 20,
-			want: []resultsPage{
+			want: []ResultsPage{
 				{Number: "«", Current: false, URL: "http://localhost:8080/?page=1&q=hello&source=test"},
 				{Number: "←", Current: false, URL: "http://localhost:8080/?page=19&q=hello&source=test"},
 				{Number: "11", Current: false, URL: "http://localhost:8080/?page=11&q=hello&source=test"},
@@ -76,7 +76,7 @@ func TestPagination(t *testing.T) {
 	}
 
 	for i, testCase := range table {
-		actual := createPagination(url, testCase.page, testCase.pageCount)
+		actual := CreatePagination(url, testCase.page, 10, testCase.pageCount)
 		if !reflect.DeepEqual(testCase.want, actual) {
 			t.Fatalf("test case %v failed: wanted %+v, got %+v", i+1, testCase.want, actual)
 		}

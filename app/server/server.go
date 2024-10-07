@@ -131,7 +131,7 @@ type pageParams struct {
 	Time    float64
 
 	Total uint32
-	Pages []resultsPage
+	Pages []ResultsPage
 }
 
 type searchResult struct {
@@ -193,7 +193,7 @@ func renderTemplateWithResults(db database.Database, config *config.Config, req 
 	if pageCount < 1 {
 		pageCount = 1
 	}
-	pages := createPagination(req.URL, int32(page), pageCount)
+	pages := CreatePagination(req.URL, int32(page), 10, pageCount)
 
 	mappedResults := make([]searchResult, len(results))
 	for i, res := range results {
