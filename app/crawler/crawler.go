@@ -156,14 +156,10 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 					add(link)
 				}
 			}
-		} else {
-			return
 		}
 
-		if len(urls) > 0 { // <- This will be true if URLs were found *before* an HTML document was parsed, which only happens for sitemaps/feeds.
-			// This page is a sitemap. Insert an "unindexable" document, which records that this document has been crawled, but has no text content of its own.
-			db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Unindexable, "", "", "", "")
-		}
+		// This page is not an HTML document. Insert an "unindexable" document, which records that this document has been crawled, but has no text content of its own.
+		db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Unindexable, "", "", "", "")
 	})
 
 	collector.OnHTML("a[href]", func(element *colly.HTMLElement) {
