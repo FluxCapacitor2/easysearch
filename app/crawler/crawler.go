@@ -25,6 +25,15 @@ type CrawlResult struct {
 	Canonical string
 }
 
+type pageContent struct {
+	canonical   string
+	status      database.QueueItemStatus
+	title       string
+	description string
+	content     string
+	errorInfo   string
+}
+
 func Crawl(source config.Source, currentDepth int32, referrer string, db database.Database, pageURL string) (*CrawlResult, error) {
 
 	// Parse the URL, canonicalize it, and convert it back into a string for later use
@@ -39,9 +48,13 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		return nil, err
 	}
 
-	canonical := parsedURL.String()
+	page := pageContent{canonical: parsedURL.String(), status: database.Unindexable}
 
-	fmt.Printf("Crawling URL: %v\n", canonical)
+	if page.canonical != pageURL {
+		fmt.Printf("Crawling URL: %v (canonicalized from %v)\n", page.canonical, pageURL)
+	} else {
+		fmt.Printf("Crawling URL: %v\n", page.canonical)
+	}
 	collector := colly.NewCollector()
 	collector.IgnoreRobotsTxt = false
 	collector.AllowedDomains = source.AllowedDomains
@@ -71,6 +84,8 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		// Make sure the page doesn't disallow indexing
 		if robotsTag, exists := element.DOM.Find("meta[name=robots]").Attr("content"); exists {
 			if strings.Contains(robotsTag, "noindex") || strings.Contains(robotsTag, "none") {
+				page.status = database.Error
+				page.errorInfo = "Disallowed by <meta name=\"robots\">"
 				return
 			}
 		}
@@ -79,7 +94,7 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		description, _ := element.DOM.Find("meta[name=description]").Attr("content")
 
 		if metaCanonicalTag, exists := element.DOM.Find("link[rel=canonical]").Attr("href"); exists {
-			canonical = metaCanonicalTag
+			page.canonical = metaCanonicalTag
 		}
 
 		// Find alternate links for RSS feeds, other languages, etc.
@@ -96,43 +111,43 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 			}
 		})
 
-		title := strings.TrimSpace(element.DOM.Find("title").Text())
-
 		// If we can parse the Readability output as HTML, get the text content using our method.
 		// This will add spaces between HTML elements.
 		if node, err := html.Parse(strings.NewReader(article.Content)); err == nil {
 			article.TextContent = getText(node)
 		}
 
+		page.status = database.Finished
+		page.title = strings.TrimSpace(element.DOM.Find("title").Text())
+		page.description = description
+
 		if err != nil || article.TextContent == "" {
 			// Readability couldn't parse the document. Instead,
 			// use a simpler heuristic to find text content.
 
-			content := ""
+			page.content = ""
 			for _, item := range element.DOM.Nodes {
-				content += getText(item)
+				page.content += getText(item)
 			}
-			err = db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Finished, title, description, content, "")
 		} else {
-			if len(title) == 0 {
-				title = article.Title
+			if len(page.title) == 0 {
+				page.title = article.Title
 			}
-			err = db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Finished, title, description, article.TextContent, "")
-		}
-
-		if err != nil {
-			fmt.Printf("Error recording document: %v\n", err)
+			page.content = article.TextContent
 		}
 	})
 
 	collector.OnResponse(func(resp *colly.Response) {
 		// The crawler follows redirects, so the canonical should be updated to match the final URL.
-		canonical = resp.Request.URL.String()
+		page.canonical = resp.Request.URL.String()
 
-		if exists, _ := db.HasDocument(source.ID, canonical); exists != nil && *exists {
-			// If the crawler followed a redirect to a document that has already been indexed,
-			// parsing and adding it to the DB is unnecessary.
-			cancelled = true
+		// If the crawler followed a redirect from an unindexed document to an indexed document,
+		// parsing and adding it to the DB is unnecessary. We can just record the redirect as a canonical.
+		if origExists, _ := db.HasDocument(source.ID, pageURL); origExists != nil && !*origExists {
+			if exists, _ := db.HasDocument(source.ID, page.canonical); exists != nil && *exists {
+				cancelled = true
+				return
+			}
 		}
 
 		ct := resp.Headers.Get("Content-Type")
@@ -150,16 +165,17 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		} else if strings.HasPrefix(ct, "application/rss+xml") || strings.HasPrefix(ct, "application/feed+json") || strings.HasPrefix(ct, "application/atom+xml") {
 			// Parse RSS, Atom, and JSON feeds using `gofeed`
 			parser := gofeed.NewParser()
-			res, _ := parser.ParseString(string(resp.Body))
+			res, err := parser.ParseString(string(resp.Body))
+			if err != nil {
+				page.status = database.Error
+				page.errorInfo = "Invalid feed content"
+			}
 			for _, item := range res.Items {
 				for _, link := range item.Links {
 					add(link)
 				}
 			}
 		}
-
-		// This page is not an HTML document. Insert an "unindexable" document, which records that this document has been crawled, but has no text content of its own.
-		db.AddDocument(source.ID, currentDepth, referrer, canonical, database.Unindexable, "", "", "", "")
 	})
 
 	collector.OnHTML("a[href]", func(element *colly.HTMLElement) {
@@ -167,19 +183,28 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		add(href)
 	})
 
-	err = collector.Visit(canonical)
+	err = collector.Visit(page.canonical)
+
+	if err != nil {
+		page.errorInfo = err.Error()
+	}
 
 	collector.Wait()
 
-	result := &CrawlResult{}
-	result.URLs = maps.Keys(urls)
-	result.Canonical = canonical
+	result := &CrawlResult{
+		URLs:      maps.Keys(urls),
+		Canonical: page.canonical,
+	}
 
-	if canonical != pageURL {
-		err := db.SetCanonical(source.ID, pageURL, canonical)
+	if page.canonical != pageURL {
+		err := db.SetCanonical(source.ID, pageURL, page.canonical)
 		if err != nil {
-			fmt.Printf("Failed to set canonical URL of page %v to %v: %v\n", pageURL, canonical, err)
+			fmt.Printf("Failed to set canonical URL of page %v to %v: %v\n", pageURL, page.canonical, err)
 		}
+	}
+
+	if !cancelled {
+		err = db.AddDocument(source.ID, currentDepth, referrer, page.canonical, page.status, page.title, page.description, page.content, page.errorInfo)
 	}
 
 	return result, err
