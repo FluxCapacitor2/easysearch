@@ -4,6 +4,7 @@ import (
 	"path"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func createDB(t *testing.T) Database {
@@ -238,5 +239,35 @@ func TestSearchQuery(t *testing.T) {
 		if len(results) != int(*count) {
 			t.Fatalf("'count' did not match length of results: %v != %v", *count, len(results))
 		}
+	}
+}
+
+func TestQueuePagesOlderThan(t *testing.T) {
+	db := createDB(t)
+
+	err := db.AddDocument("source", 1, "", "", Finished, "", "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error adding document: %v", err)
+	}
+	time.Sleep(1 * time.Second) // Ensure the document is at least 1 second old
+	err = db.QueuePagesOlderThan("source", 0)
+	if err != nil {
+		t.Fatalf("failed to queue pages older than 0 days: %v", err)
+	}
+
+	doc, err := db.PopQueue("source")
+	if err != nil {
+		t.Fatalf("error popping queue: %v", err)
+	}
+	if doc == nil {
+		t.Fatalf("page was not queued; expected to be able to pop 1 item off the queue")
+	}
+
+	doc, err = db.PopQueue("source")
+	if err != nil {
+		t.Fatalf("error popping queue: %v", err)
+	}
+	if doc != nil {
+		t.Fatalf("more than one page was queued; expected exactly 1 page in the queue")
 	}
 }

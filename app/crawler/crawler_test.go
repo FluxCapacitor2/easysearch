@@ -90,6 +90,10 @@ func TestCrawlWithServerError(t *testing.T) {
 	url := "https://httpstat.us/500"
 	_, err := Crawl(source, 1, url, db, url)
 
+	if err == nil {
+		t.Fatalf("expected error due to 500 status; none was received")
+	}
+
 	if err.Error() != "Internal Server Error" {
 		t.Fatalf("expected error due to 500 status; got %v\n", err)
 	}

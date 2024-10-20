@@ -298,7 +298,7 @@ func (db *SQLiteDatabase) CleanQueue() error {
 }
 
 func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) error {
-	rows, err := db.conn.Query("SELECT source, referrer, url, crawledAt, depth, status FROM pages WHERE source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
+	rows, err := db.conn.Query("SELECT source, referrer, url, crawledAt, depth, status FROM pages WHERE url NOT IN (SELECT url FROM crawl_queue) AND source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
 
 	if err != nil {
 		return err

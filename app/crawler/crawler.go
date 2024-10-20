@@ -204,7 +204,10 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 	}
 
 	if !cancelled {
-		err = db.AddDocument(source.ID, currentDepth, referrer, page.canonical, page.status, page.title, page.description, page.content, page.errorInfo)
+		addDocErr := db.AddDocument(source.ID, currentDepth, referrer, page.canonical, page.status, page.title, page.description, page.content, page.errorInfo)
+		if addDocErr != nil {
+			err = addDocErr
+		}
 	}
 
 	return result, err
