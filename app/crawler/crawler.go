@@ -94,7 +94,7 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		description, _ := element.DOM.Find("meta[name=description]").Attr("content")
 
 		if metaCanonicalTag, exists := element.DOM.Find("link[rel=canonical]").Attr("href"); exists {
-			page.canonical = metaCanonicalTag
+			page.canonical = element.Request.AbsoluteURL(metaCanonicalTag)
 		}
 
 		// Find alternate links for RSS feeds, other languages, etc.
@@ -156,11 +156,11 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 			// Attempt to parse this response as a sitemap or sitemap index
 			reader := bytes.NewReader(resp.Body)
 			sitemap.Parse(reader, func(entry sitemap.Entry) error {
-				return add(entry.GetLocation())
+				return add(resp.Request.AbsoluteURL(entry.GetLocation()))
 			})
 			reader.Reset(resp.Body)
 			sitemap.ParseIndex(reader, func(entry sitemap.IndexEntry) error {
-				return add(entry.GetLocation())
+				return add(resp.Request.AbsoluteURL(entry.GetLocation()))
 			})
 		} else if strings.HasPrefix(ct, "application/rss+xml") || strings.HasPrefix(ct, "application/feed+json") || strings.HasPrefix(ct, "application/atom+xml") {
 			// Parse RSS, Atom, and JSON feeds using `gofeed`
@@ -172,7 +172,7 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 			}
 			for _, item := range res.Items {
 				for _, link := range item.Links {
-					add(link)
+					add(resp.Request.AbsoluteURL(link))
 				}
 			}
 		}
