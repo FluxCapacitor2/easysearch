@@ -47,7 +47,7 @@ func TestEscape(t *testing.T) {
 func TestPopQueue(t *testing.T) {
 	db := createDB(t)
 
-	db.AddToQueue("source1", "https://www.bswanson.dev", []string{"https://example.com/"}, 1)
+	db.AddToQueue("source1", "https://www.bswanson.dev", []string{"https://example.com/"}, 1, false)
 
 	// The first time, there should be an item to pop off the queue
 	{
@@ -79,7 +79,7 @@ func TestPopQueue(t *testing.T) {
 func TestPopQueueWithOtherSource(t *testing.T) {
 	db := createDB(t)
 
-	db.AddToQueue("source1", "https://www.bswanson.dev", []string{"https://example.com/"}, 1)
+	db.AddToQueue("source1", "https://www.bswanson.dev", []string{"https://example.com/"}, 1, false)
 
 	res, err := db.PopQueue("source2")
 

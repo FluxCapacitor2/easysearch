@@ -85,7 +85,7 @@ func startCrawl(db database.Database, config *config.Config) {
 						fmt.Printf("Failed to find canonical URL for page %v: %v\n", parsed.String(), err)
 						continue
 					}
-					err = db.AddToQueue(src.ID, canonical.String(), []string{canonical.String()}, 0)
+					err = db.AddToQueue(src.ID, canonical.String(), []string{canonical.String()}, 0, false)
 					if err != nil {
 						fmt.Printf("Failed to add page %v to queue: %v\n", src.URL, err)
 					}

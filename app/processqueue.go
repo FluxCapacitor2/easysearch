@@ -87,7 +87,7 @@ func crawlFirstInQueue(db database.Database, src config.Source) {
 		filtered := filterURLs(db, src, result.URLs)
 
 		if item.Depth+1 <= src.MaxDepth {
-			err := db.AddToQueue(src.ID, result.Canonical, filtered, item.Depth+1)
+			err := db.AddToQueue(src.ID, result.Canonical, filtered, item.Depth+1, false)
 			if err != nil {
 				fmt.Printf("Error adding URLs to queue: %v\n", err)
 			}

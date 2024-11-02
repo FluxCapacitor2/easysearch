@@ -17,7 +17,7 @@ type Database interface {
 	Search(sources []string, query string, page uint32, pageSize uint32) ([]Result, *uint32, error)
 
 	// Add an item to the crawl queue
-	AddToQueue(source string, referrer string, urls []string, depth int32) error
+	AddToQueue(source string, referrer string, urls []string, depth int32, isRefresh bool) error
 	// Update the status of the item in the queue denoted by the specified url
 	UpdateQueueEntry(source string, url string, status QueueItemStatus) error
 	// Sets the first item in the queue to `Processing` and returns it. If both the item and `error` is nil, the queue is empty OR another worker already claimed the row.
@@ -76,6 +76,7 @@ type QueueItem struct {
 	AddedAt   string
 	UpdatedAt string
 	Depth     int32
+	IsRefresh bool
 	Referrer  string
 	Status    QueueItemStatus
 }

@@ -230,7 +230,7 @@ func processResult(input string, start string, end string) []Match {
 	}
 }
 
-func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []string, depth int32) error {
+func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []string, depth int32, isRefresh bool) error {
 
 	tx, err := db.conn.Begin()
 
@@ -239,7 +239,7 @@ func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []stri
 	}
 
 	for _, url := range urls {
-		_, err := tx.Exec("INSERT INTO crawl_queue (source, referrer, url, depth) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING;", source, referrer, url, depth)
+		_, err := tx.Exec("INSERT INTO crawl_queue (source, referrer, url, depth, isRefresh) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING;", source, referrer, url, depth, isRefresh)
 		if err != nil {
 			rbErr := tx.Rollback()
 			if rbErr != nil {
@@ -258,11 +258,11 @@ func (db *SQLiteDatabase) PopQueue(source string) (*QueueItem, error) {
 	row := db.conn.QueryRow(`
 	  UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE rowid = (
 	    SELECT rowid FROM crawl_queue WHERE status = ? AND source = ? ORDER BY addedAt LIMIT 1
-	  ) RETURNING source, referrer, url, status, depth, addedAt, updatedAt;
+	  ) RETURNING source, referrer, url, status, depth, isRefresh, addedAt, updatedAt;
 	`, Processing, Pending, source)
 
 	item := &QueueItem{}
-	err := row.Scan(&item.Source, &item.Referrer, &item.URL, &item.Status, &item.Depth, &item.AddedAt, &item.UpdatedAt)
+	err := row.Scan(&item.Source, &item.Referrer, &item.URL, &item.Status, &item.Depth, &item.IsRefresh, &item.AddedAt, &item.UpdatedAt)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -314,7 +314,7 @@ func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) erro
 			return err
 		}
 
-		err = db.AddToQueue(source, row.Referrer, []string{row.URL}, row.Depth)
+		err = db.AddToQueue(source, row.Referrer, []string{row.URL}, row.Depth, true)
 
 		if err != nil {
 			return err

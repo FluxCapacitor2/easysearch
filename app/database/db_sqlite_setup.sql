@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS crawl_queue(
     depth INTEGER,
     referrer TEXT,
     addedAt TEXT DEFAULT CURRENT_TIMESTAMP,
-    updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+    updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+    isRefresh INTEGER DEFAULT 0
 ) STRICT;
 
 -- When a canonical URL is discovered, it is cached in this table to prevent excessively querying the target
