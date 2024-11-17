@@ -7,6 +7,7 @@ A simple way to add search to your website, featuring:
 - Sitemap scanning
 - An API for search results
 - Multi-tenancy
+- Vector similarity search, allowing search by semantic meaning instead of exact matches ([what is this?](https://www.ibm.com/topics/vector-search))
 - A prebuilt search page that works without JavaScript (with [progressive enhancement](https://developer.mozilla.org/en-US/docs/Glossary/Progressive_Enhancement) for users with JS enabled)
 
 This project is built with [Go](https://go.dev/) and requires [CGo](https://go.dev/wiki/cgo) due to the [SQLite](https://www.sqlite.org/) [dependency](https://github.com/mattn/go-sqlite3).
@@ -38,7 +39,7 @@ This is a FOSS alternative to the aforementioned products that addresses my prim
 - [ ] MySQL support
 - [ ] Prebuilt components for React, Vue, Svelte, etc.
 - [ ] Exponential backoff for crawl errors
-- [ ] Vector search?
+- [x] Vector search
 - [ ] Generating and indexing transcripts of video and audio recordings?
 - [ ] Image search?
 
@@ -47,6 +48,8 @@ This is a FOSS alternative to the aforementioned products that addresses my prim
 Easysearch requires a config file located at `./config.yml` in the current working directory.
 
 See the example in [config-sample.yml](https://github.com/FluxCapacitor2/easysearch/blob/main/config-sample.yml) for more information.
+
+**Note**: If you are using an API for vector embeddings that does not require an API key, you still need to add the `OPENAI_API_KEY` environment variable. It cannot be empty, but it can be any random string.
 
 ## Development
 
@@ -67,6 +70,13 @@ go run --tags="fts5" ./app
 **Note**: When using SQLite, you have to add a build tag to enable full-text search with the [`fts5` extension](https://sqlite.org/fts5.html) (see [this section](https://github.com/mattn/go-sqlite3/tree/master?tab=readme-ov-file#feature--extension-list) of the `go-sqlite3` README for more info). That is why the `--tags="fts5"` flag is present. If you're only using Postgres, you can remove the flag for a slightly faster build.
 
 </small>
+
+3. Make sure you have a `sqlite3` development package installed on your system that provides `sqlite3.h`. For example:
+
+   - Fedora/RHEL: `dnf install libsqlite3x-devel`
+   - Ubuntu/Debian: `apt install libsqlite3-dev`
+
+   If your system does not provide such a package, you can run Go builds in a Docker container and use one of the commands above to install the required package.
 
 For automatic code formatting, make sure you have [Node.js](https://nodejs.org/) installed. Then, install [Prettier](https://prettier.io/) via NPM:
 

@@ -15,7 +15,7 @@ func createDB(t *testing.T) database.Database {
 		t.Fatalf("database creation failed: %v", err)
 	}
 
-	if err := db.Setup(); err != nil {
+	if err := db.Setup(1536); err != nil {
 		t.Fatalf("database setup failed: %v", err)
 	}
 

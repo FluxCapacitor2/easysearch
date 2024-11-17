@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/fluxcapacitor2/easysearch/app/config"
 	"github.com/fluxcapacitor2/easysearch/app/crawler"
 	"github.com/fluxcapacitor2/easysearch/app/database"
+	"github.com/fluxcapacitor2/easysearch/app/embedding"
 	"github.com/go-co-op/gocron/v2"
 )
 
@@ -24,14 +26,31 @@ func startQueueJob(db database.Database, config *config.Config) {
 		interval := 60.0 / float64(src.Speed)
 
 		if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(interval*float64(time.Second))), gocron.NewTask(func() {
-			crawlFirstInQueue(db, src)
+			processCrawlQueue(db, config, src)
 		})); err != nil {
 			fmt.Printf("Error creating crawl job: %v", err)
 		}
 	}
 
+	for _, src := range config.Sources {
+		if !src.Embeddings.Enabled {
+			continue
+		}
+		interval := 60.0 / float64(src.Embeddings.Speed)
+
+		if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(interval*float64(time.Second))), gocron.NewTask(func() {
+			processEmbedQueue(db, config, src)
+		})); err != nil {
+			fmt.Printf("Error creating embedding job: %v", err)
+		}
+	}
+
+	if err := db.Cleanup(config); err != nil {
+		fmt.Printf("error running Cleanup on startup: %v\n", err)
+	}
+
 	if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(5*time.Minute)), gocron.NewTask(func() {
-		err := db.CleanQueue()
+		err := db.Cleanup(config)
 		if err != nil {
 			fmt.Printf("Error cleaning queue: %v\n", err)
 		}
@@ -42,55 +61,118 @@ func startQueueJob(db database.Database, config *config.Config) {
 	scheduler.Start()
 }
 
-func crawlFirstInQueue(db database.Database, src config.Source) {
+func processEmbedQueue(db database.Database, config *config.Config, src config.Source) {
+	item, err := db.PopEmbedQueue(src.ID)
+	if err != nil {
+		fmt.Printf("Failed to get next item in embed queue: %v\n", err)
+	}
+	if item == nil {
+		// The queue is empty
+		return
+	}
+
+	markFailure := func() {
+		err := db.UpdateEmbedQueueEntry(item.ID, database.Error)
+		if err != nil {
+			fmt.Printf("failed to mark embedding queue item as Error: %v\n", err)
+		}
+	}
+
+	vector, err := embedding.GetEmbeddings(config.Embeddings.OpenAIBaseURL, config.Embeddings.Model, item.Content)
+	if err != nil {
+		fmt.Printf("error getting embeddings: %v\n", err)
+		markFailure()
+		return
+	}
+
+	err = db.AddEmbedding(item.PageID, item.ChunkIndex, item.Content, vector)
+	if err != nil {
+		fmt.Printf("error saving embedding: %v\n", err)
+		markFailure()
+		return
+	}
+
+	err = db.UpdateEmbedQueueEntry(item.ID, database.Finished)
+	if err != nil {
+		fmt.Printf("failed to mark embedding queue item as Finished: %v\n", err)
+	}
+}
+
+func processCrawlQueue(db database.Database, config *config.Config, src config.Source) {
 	// Pop the oldest item off the queue and crawl it.
 	item, err := db.PopQueue(src.ID)
 	if err != nil {
 		fmt.Printf("Failed to get next item in crawl queue: %v\n", err)
 	}
-	if item != nil {
-		// The `item` is nil when there are no items in the queue
-		result, err := crawler.Crawl(src, item.Depth, item.Referrer, db, item.URL)
+	if item == nil {
+		// The queue is empty
+		return
+	}
 
+	// The `item` is nil when there are no items in the queue
+	result, err := crawler.Crawl(src, item.Depth, item.Referrer, db, item.URL)
+
+	if err != nil {
+		// Mark the queue entry as errored
+		fmt.Printf("Error crawling URL %v from source %v: %v\n", item.URL, src.ID, err)
+		{
+			err := db.UpdateQueueEntry(item.ID, database.Error)
+			if err != nil {
+				fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.URL, database.Error, err)
+			}
+		}
+
+		// Add an entry to the pages table to prevent immediately recrawling the same URL when referred from other sources.
+		// Additionally, if refresh is enabled, another crawl attempt will be made after the refresh interval passes.
+		if result != nil {
+			_, err := db.AddDocument(src.ID, item.Depth, item.Referrer, result.Canonical, database.Error, "", "", "", err.Error())
+			if err != nil {
+				fmt.Printf("Failed to add page in 'error' state: %v\n", err)
+			}
+		}
+
+	} else {
+		// Chunk the page into sections and add it to the embedding queue
+		if result.PageID > 0 {
+			chunks, err := embedding.ChunkText(result.Content.Content, config.Embeddings.ChunkSize, config.Embeddings.ChunkOverlap)
+
+			if err != nil {
+				fmt.Printf("error chunking page: %v\n", err)
+			}
+
+			// Filter out empty chunks
+			filtered := make([]string, 0, len(chunks))
+			for _, chunk := range chunks {
+				if len(strings.TrimSpace(chunk)) != 0 {
+					filtered = append(filtered, chunk)
+				}
+			}
+
+			err = db.AddToEmbedQueue(result.PageID, filtered)
+
+			if err != nil {
+				fmt.Printf("error adding page chunks to embed queue: %v\n", err)
+			}
+		}
+
+		// If the crawl completed successfully, mark the item as finished
+		err = db.UpdateQueueEntry(item.ID, database.Finished)
 		if err != nil {
-			// Mark the queue entry as errored
-			fmt.Printf("Error crawling URL %v from source %v: %v\n", item.URL, src.ID, err)
-			{
-				err := db.UpdateQueueEntry(src.ID, item.URL, database.Error)
-				if err != nil {
-					fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.URL, database.Error, err)
-				}
-			}
-
-			// Add an entry to the pages table to prevent immediately recrawling the same URL when referred from other sources.
-			// Additionally, if refresh is enabled, another crawl attempt will be made after the refresh interval passes.
-			if result != nil {
-				err := db.AddDocument(src.ID, item.Depth, item.Referrer, result.Canonical, database.Error, "", "", "", err.Error())
-				if err != nil {
-					fmt.Printf("Failed to add page in 'error' state: %v\n", err)
-				}
-			}
-
-		} else {
-			// If the crawl completed successfully, mark the item as finished
-			err := db.UpdateQueueEntry(src.ID, item.URL, database.Finished)
-			if err != nil {
-				fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.URL, database.Finished, err)
-			}
+			fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.URL, database.Finished, err)
 		}
+	}
 
-		if item.Depth+1 >= src.MaxDepth {
-			return // No need to add any new URLs
-		}
+	if item.Depth+1 >= src.MaxDepth {
+		return // No need to add any new URLs
+	}
 
-		// Add URLs found in the crawl to the queue
-		filtered := filterURLs(db, src, result.URLs)
+	// Add URLs found in the crawl to the queue
+	filtered := filterURLs(db, src, result.URLs)
 
-		if item.Depth+1 <= src.MaxDepth {
-			err := db.AddToQueue(src.ID, result.Canonical, filtered, item.Depth+1, false)
-			if err != nil {
-				fmt.Printf("Error adding URLs to queue: %v\n", err)
-			}
+	if item.Depth+1 <= src.MaxDepth {
+		err := db.AddToQueue(src.ID, result.Canonical, filtered, item.Depth+1, false)
+		if err != nil {
+			fmt.Printf("Error adding URLs to queue: %v\n", err)
 		}
 	}
 }

@@ -44,7 +44,7 @@ func main() {
 
 	{
 		// Create DB tables if they don't exist (and set SQLite to WAL mode)
-		err := db.Setup()
+		err := db.Setup(config.Embeddings.Dimensions)
 
 		if err != nil {
 			panic(fmt.Sprintf("Failed to set up database: %v", err))

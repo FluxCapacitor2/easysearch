@@ -15,6 +15,13 @@ type Config struct {
 		Driver           string
 		ConnectionString string `yaml:"connectionString"`
 	} `yaml:"db"`
+	Embeddings struct {
+		OpenAIBaseURL string `yaml:"openaiBaseUrl"`
+		Model         string
+		Dimensions    int
+		ChunkSize     int `yaml:"chunkSize"`
+		ChunkOverlap  int `yaml:"chunkOverlap"`
+	}
 	Sources     []Source
 	ResultsPage ResultsPageConfig `yaml:"resultsPage"`
 }
@@ -45,6 +52,12 @@ type Source struct {
 		Enabled bool
 		// The amount of time in between refreshes per URL, in days.
 		MinAge int32 `yaml:"minAge"`
+	}
+
+	Embeddings struct {
+		Enabled bool
+		// The maximum number of requests per minute to the embeddings API
+		Speed int
 	}
 }
 

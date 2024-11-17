@@ -8,6 +8,9 @@ import (
 
 	_ "embed"
 
+	vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
+	"github.com/fluxcapacitor2/easysearch/app/config"
+	"github.com/fluxcapacitor2/easysearch/app/embedding"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -22,14 +25,16 @@ type SQLiteDatabase struct {
 //go:embed db_sqlite_setup.sql
 var setupCommands string
 
-func (db *SQLiteDatabase) Setup() error {
-	_, err := db.conn.Exec(setupCommands)
+func (db *SQLiteDatabase) Setup(vectorDimension int) error {
+	vec.Auto() // Load the `sqlite-vec` extension
+	_, err := db.conn.Exec(fmt.Sprintf(setupCommands, vectorDimension))
 	return err
 }
 
-func (db *SQLiteDatabase) AddDocument(source string, depth int32, referrer string, url string, status QueueItemStatus, title string, description string, content string, errorInfo string) error {
-	_, err := db.conn.Exec("REPLACE INTO pages (source, depth, referrer, status, url, title, description, content, errorInfo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);", source, depth, referrer, status, url, title, description, content, errorInfo)
-	return err
+func (db *SQLiteDatabase) AddDocument(source string, depth int32, referrer string, url string, status QueueItemStatus, title string, description string, content string, errorInfo string) (int64, error) {
+	id := int64(-1)
+	err := db.conn.QueryRow("REPLACE INTO pages (source, depth, referrer, status, url, title, description, content, errorInfo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING (id);", source, depth, referrer, status, url, title, description, content, errorInfo).Scan(&id)
+	return id, err
 }
 
 func (db *SQLiteDatabase) RemoveDocument(source string, url string) error {
@@ -55,10 +60,27 @@ func (db *SQLiteDatabase) HasDocument(source string, url string) (*bool, error) 
 }
 
 func (db *SQLiteDatabase) GetDocument(source string, url string) (*Page, error) {
-	cursor := db.conn.QueryRow("SELECT source, referrer, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
+	cursor := db.conn.QueryRow("SELECT id, source, referrer, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
 
 	page := Page{}
-	err := cursor.Scan(&page.Source, &page.Referrer, &page.URL, &page.Title, &page.Description, &page.Content, &page.Depth, &page.CrawledAt, &page.Status, &page.ErrorInfo)
+	err := cursor.Scan(&page.ID, &page.Source, &page.Referrer, &page.URL, &page.Title, &page.Description, &page.Content, &page.Depth, &page.CrawledAt, &page.Status, &page.ErrorInfo)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	return &page, nil
+}
+
+func (db *SQLiteDatabase) GetDocumentByID(id int64) (*Page, error) {
+	cursor := db.conn.QueryRow("SELECT id, source, referrer, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE id = ?;", id)
+
+	page := Page{}
+	err := cursor.Scan(&page.ID, &page.Source, &page.Referrer, &page.URL, &page.Title, &page.Description, &page.Content, &page.Depth, &page.CrawledAt, &page.Status, &page.ErrorInfo)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -97,7 +119,7 @@ func escape(searchTerm string) string {
 	return quoted
 }
 
-func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, pageSize uint32) ([]Result, *uint32, error) {
+func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, pageSize uint32) ([]FTSResult, *uint32, error) {
 
 	tx, err := db.conn.Begin()
 	if err != nil {
@@ -115,7 +137,7 @@ func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, p
 			snippet(pages_fts, 2, ?, ?, '…', 8) AS description,
 			snippet(pages_fts, 3, ?, ?, '…', 24) AS content
 		FROM pages
-		JOIN pages_fts ON pages.rowid = pages_fts.rowid
+		JOIN pages_fts ON pages.id = pages_fts.rowid
 		WHERE pages.source IN (%s)
 			AND pages.status = ?
 			AND pages_fts MATCH ?
@@ -146,7 +168,7 @@ func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, p
 		return nil, nil, err
 	}
 
-	var results []Result
+	var results []FTSResult
 
 	for rows.Next() {
 		item := &RawResult{}
@@ -156,7 +178,7 @@ func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, p
 		}
 
 		// Process the result to convert strings into `Match` instances
-		res := &Result{
+		res := &FTSResult{
 			Rank:        item.Rank,
 			URL:         item.URL,
 			Title:       processResult(item.Title, start, end),
@@ -230,6 +252,56 @@ func processResult(input string, start string, end string) []Match {
 	}
 }
 
+func (db *SQLiteDatabase) SimilaritySearch(sources []string, query []float32, limit int) ([]SimilarityResult, error) {
+
+	serialized, err := vec.SerializeFloat32(query)
+	if err != nil {
+		return nil, err
+	}
+
+	args := []any{serialized}
+	for _, src := range sources {
+		args = append(args, src)
+	}
+	args = append(args, Finished, limit, limit*5)
+
+	// TODO: In this query, we use `k = limit * 5` to select the first 5N results and then limit them to N with a LIMIT clause.
+	//       When `sqlite-vec` adds support for metadata columns in the next release, this workaround will be unnecessary
+	//       and we can filter the sources directly.
+
+	sourcesString := strings.Repeat("?, ", len(sources)-1) + "?"
+
+	rows, err := db.conn.Query(fmt.Sprintf(`
+	SELECT pages_vec.distance, pages.url, pages.title, vec_chunks.chunk FROM pages_vec
+	JOIN vec_chunks USING (id)
+	JOIN pages ON pages.id = vec_chunks.page
+	WHERE
+		pages_vec.embedding MATCH ? AND
+		pages.source IN (%s) AND
+		pages.status = ? AND
+		k = ?
+	ORDER BY pages_vec.distance
+	LIMIT ?;
+	`, sourcesString), args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]SimilarityResult, 0)
+
+	for rows.Next() {
+		res := SimilarityResult{}
+		err := rows.Scan(&res.Similarity, &res.URL, &res.Title, &res.Chunk)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, res)
+	}
+
+	return results, err
+}
+
 func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []string, depth int32, isRefresh bool) error {
 
 	tx, err := db.conn.Begin()
@@ -247,6 +319,41 @@ func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []stri
 			}
 			return err
 		}
+	}
+
+	err = tx.Commit()
+	return err
+}
+
+func (db *SQLiteDatabase) AddToEmbedQueue(pageID int64, chunks []string) error {
+
+	tx, err := db.conn.Begin()
+
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM embed_queue WHERE page = ?;", pageID)
+	if err != nil {
+		rbErr := tx.Rollback()
+		if rbErr != nil {
+			return rbErr
+		}
+		return err
+	}
+
+	i := 0
+	for _, chunk := range chunks {
+		_, err := tx.Exec("INSERT INTO embed_queue (page, chunkIndex, chunk) VALUES (?, ?, ?);", pageID, i, chunk)
+		if err != nil {
+			rbErr := tx.Rollback()
+			if rbErr != nil {
+				return rbErr
+			}
+			return err
+		}
+
+		i++
 	}
 
 	err = tx.Commit()
@@ -274,25 +381,138 @@ func (db *SQLiteDatabase) PopQueue(source string) (*QueueItem, error) {
 	return item, nil
 }
 
-func (db *SQLiteDatabase) UpdateQueueEntry(source string, url string, status QueueItemStatus) error {
+func (db *SQLiteDatabase) PopEmbedQueue(source string) (*EmbedQueueItem, error) {
+	// Find the first item in the queue and update it in one step. If the row isn't returned, another process must have updated it at the same time.
+	row := db.conn.QueryRow(`
+	  UPDATE embed_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = (
+	    SELECT embed_queue.id FROM embed_queue JOIN pages ON embed_queue.page = pages.id WHERE embed_queue.status = ? AND pages.source = ? ORDER BY embed_queue.addedAt LIMIT 1
+	  ) RETURNING id, status, page, chunkIndex, chunk;
+	`, Processing, Pending, source)
+
+	item := &EmbedQueueItem{}
+	err := row.Scan(&item.ID, &item.Status, &item.PageID, &item.ChunkIndex, &item.Content)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return item, nil
+}
+
+func (db *SQLiteDatabase) AddEmbedding(pageID int64, chunkIndex int, chunk string, vector []float32) error {
+	serialized, err := vec.SerializeFloat32(vector)
+	if err != nil {
+		return err
+	}
+
+	tx, err := db.conn.Begin()
+	if err != nil {
+		if err := tx.Rollback(); err != nil {
+			return err
+		}
+		return err
+	}
+
+	id := int64(-1)
+	err = tx.QueryRow("INSERT INTO vec_chunks (page, chunkIndex, chunk) VALUES (?, ?, ?) RETURNING id;", pageID, chunkIndex, chunk).Scan(&id)
+	if err != nil {
+		if err := tx.Rollback(); err != nil {
+			return err
+		}
+		return err
+	}
+
+	_, err = tx.Exec("INSERT INTO pages_vec (id, embedding) VALUES (?, ?);", id, serialized)
+	if err != nil {
+		if err := tx.Rollback(); err != nil {
+			return err
+		}
+		return err
+	}
+
+	err = tx.Commit()
+
+	return err
+}
+
+func (db *SQLiteDatabase) UpdateQueueEntry(id int64, status QueueItemStatus) error {
 	if status == Finished {
 		// If the item is finished, it can be immediately deleted
-		_, err := db.conn.Exec("DELETE FROM crawl_queue WHERE source = ? AND url = ?", source, url)
+		_, err := db.conn.Exec("DELETE FROM crawl_queue WHERE id = ?;", id)
 		return err
 	} else {
-		_, err := db.conn.Exec("UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE source = ? AND url = ?", status, source, url)
+		_, err := db.conn.Exec("UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?", status, id)
 		return err
 	}
 }
 
-func (db *SQLiteDatabase) CleanQueue() error {
+func (db *SQLiteDatabase) UpdateEmbedQueueEntry(id int64, status QueueItemStatus) error {
+	if status == Finished {
+		// If the item is finished, it can be immediately deleted
+		_, err := db.conn.Exec("DELETE FROM embed_queue WHERE id = ?;", id)
+		return err
+	} else {
+		_, err := db.conn.Exec("UPDATE embed_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?;", status, id)
+		return err
+	}
+}
+
+func (db *SQLiteDatabase) Cleanup(config *config.Config) error {
 	_, err := db.conn.Exec(`
 		-- 1) Clear all Finished queue items (this is a sanity check; they should be immediately deleted from UpdateQueueEntry)
 		DELETE FROM crawl_queue WHERE status = ?;
 
-		-- 2) Mark items that have been Processing for >5 minutes as Pending again
-		UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE status = ? AND unixepoch() - unixepoch(updatedAt) > 5 * 60;
-		`, Finished, Pending, Processing)
+		-- 2) Mark items that have been Processing for over a minute as Pending again
+		UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE status = ? AND unixepoch() - unixepoch(updatedAt) > 60;
+
+		-- Do the same for the embedding queue
+		DELETE FROM embed_queue WHERE status = ?;
+		UPDATE embed_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE status IN (?, ?) AND unixepoch() - unixepoch(updatedAt) > 60;
+
+		-- Remove embeddings which aren't linked to a page
+		-- This should never happen because of the foreign key, but it seems to occur on rare occasion
+		DELETE FROM embed_queue WHERE page NOT IN (SELECT id FROM pages);
+		`, Finished, Pending, Processing, Finished, Pending, Error, Processing)
+
+	if err != nil {
+		return err
+	}
+
+	// If a page has been indexed but has no embeddings, make sure an embedding job has been queued
+	rows, err := db.conn.Query("SELECT id, content FROM pages WHERE status = ? AND id NOT IN (SELECT page FROM vec_chunks) AND id NOT IN (SELECT page FROM embed_queue);", Finished)
+	if err != nil {
+		return fmt.Errorf("error finding pages without embeddings: %v", err)
+	}
+	for rows.Next() {
+		var id int64
+		var content string
+		err := rows.Scan(&id, &content)
+		if err != nil {
+			return err
+		}
+
+		chunks, err := embedding.ChunkText(content, config.Embeddings.ChunkSize, config.Embeddings.ChunkOverlap)
+
+		if err != nil {
+			return fmt.Errorf("error chunking page: %v", err)
+		}
+
+		// Filter out empty chunks
+		filtered := make([]string, 0, len(chunks))
+		for _, chunk := range chunks {
+			if len(strings.TrimSpace(chunk)) != 0 {
+				filtered = append(filtered, chunk)
+			}
+		}
+
+		err = db.AddToEmbedQueue(id, filtered)
+		if err != nil {
+			return fmt.Errorf("error adding page to embedding queue: %v", err)
+		}
+	}
 
 	return err
 }
@@ -325,10 +545,10 @@ func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) erro
 }
 
 func (db *SQLiteDatabase) GetCanonical(source string, url string) (*Canonical, error) {
-	cursor := db.conn.QueryRow("SELECT url, canonical, crawledAt FROM canonicals WHERE source = ? AND url = ?", source, url)
+	cursor := db.conn.QueryRow("SELECT id, url, canonical, crawledAt FROM canonicals WHERE source = ? AND url = ?", source, url)
 
 	canonical := &Canonical{}
-	err := cursor.Scan(&canonical.Original, &canonical.Canonical, &canonical.CrawledAt)
+	err := cursor.Scan(&canonical.ID, &canonical.Original, &canonical.Canonical, &canonical.CrawledAt)
 
 	if err != nil {
 		if err == sql.ErrNoRows {

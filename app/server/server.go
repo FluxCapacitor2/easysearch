@@ -16,19 +16,11 @@ import (
 
 	"github.com/fluxcapacitor2/easysearch/app/config"
 	"github.com/fluxcapacitor2/easysearch/app/database"
+	"github.com/fluxcapacitor2/easysearch/app/embedding"
 )
 
 //go:embed templates static
 var content embed.FS
-
-type httpResponse struct {
-	status       int16
-	Success      bool              `json:"success"`
-	Error        string            `json:"error,omitempty"`
-	Results      []database.Result `json:"results"`
-	Pagination   paginationInfo    `json:"pagination"`
-	ResponseTime float64           `json:"responseTime"`
-}
 
 type paginationInfo struct {
 	Page     uint32 `json:"page"`
@@ -68,6 +60,15 @@ func Start(db database.Database, config *config.Config) {
 	}
 
 	http.HandleFunc("/api/search", func(w http.ResponseWriter, req *http.Request) {
+		type httpResponse struct {
+			status       int16
+			Success      bool                 `json:"success"`
+			Error        string               `json:"error,omitempty"`
+			Results      []database.FTSResult `json:"results"`
+			Pagination   paginationInfo       `json:"pagination"`
+			ResponseTime float64              `json:"responseTime"`
+		}
+
 		timeStart := time.Now().UnixMicro()
 		var response *httpResponse
 
@@ -116,6 +117,69 @@ func Start(db database.Database, config *config.Config) {
 		}
 	})
 
+	http.HandleFunc("/api/similarity-search", func(w http.ResponseWriter, req *http.Request) {
+		type httpResponse struct {
+			status       int16
+			Success      bool                        `json:"success"`
+			Error        string                      `json:"error,omitempty"`
+			Results      []database.SimilarityResult `json:"results"`
+			ResponseTime float64                     `json:"responseTime"`
+		}
+
+		timeStart := time.Now().UnixMicro()
+		var response *httpResponse
+
+		src := req.URL.Query()["source"]
+		q := req.URL.Query().Get("q")
+
+		if q != "" && src != nil && len(src) > 0 {
+
+			vector, err := embedding.GetEmbeddings(config.Embeddings.OpenAIBaseURL, config.Embeddings.Model, q)
+			if err != nil {
+				response = &httpResponse{
+					status:  500,
+					Success: false,
+					Error:   "Internal server error",
+				}
+
+				fmt.Printf("Error generating embeddings for search query: %v\n", err)
+			} else {
+				results, err := db.SimilaritySearch(src, vector, 10)
+				if err != nil {
+					response = &httpResponse{
+						status:  500,
+						Success: false,
+						Error:   "Internal server error",
+					}
+
+					fmt.Printf("Error generating search results: %v\n", err)
+				} else {
+					response = &httpResponse{
+						status:  200,
+						Success: true,
+						Results: results,
+					}
+				}
+			}
+		} else {
+			response = &httpResponse{
+				status:  400,
+				Success: false,
+				Error:   "Bad request",
+			}
+		}
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(int(response.status))
+		response.ResponseTime = float64(time.Now().UnixMicro()-timeStart) / 1e6
+		str, err := json.Marshal(response)
+		if err != nil {
+			w.Write([]byte(`{"success":"false","error":"Failed to marshal struct into JSON"}`))
+		} else {
+			w.Write([]byte(str))
+		}
+	})
+
 	addr := fmt.Sprintf("%v:%v", config.HTTP.Listen, config.HTTP.Port)
 	fmt.Printf("Listening on http://%v\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
@@ -135,7 +199,7 @@ type pageParams struct {
 }
 
 type searchResult struct {
-	database.Result
+	database.FTSResult
 	Breadcrumbs []breadcrumb
 }
 
@@ -154,7 +218,7 @@ func renderTemplateWithResults(db database.Database, config *config.Config, req 
 	q := req.URL.Query().Get("q")
 	page, err := strconv.ParseUint(req.URL.Query().Get("page"), 10, 32)
 
-	var results []database.Result
+	var results []database.FTSResult
 	var total *uint32
 	var totalTime int64
 
@@ -173,7 +237,7 @@ func renderTemplateWithResults(db database.Database, config *config.Config, req 
 			return
 		}
 	} else {
-		results = make([]database.Result, 0)
+		results = make([]database.FTSResult, 0)
 		t := uint32(0)
 		total = &t
 		totalTime = 0
@@ -212,7 +276,7 @@ func renderTemplateWithResults(db database.Database, config *config.Config, req 
 		}
 
 		mappedResults[i] = searchResult{
-			Result:      res,
+			FTSResult:   res,
 			Breadcrumbs: breadcrumbs,
 		}
 	}

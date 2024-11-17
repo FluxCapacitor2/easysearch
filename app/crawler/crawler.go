@@ -23,15 +23,19 @@ type CrawlResult struct {
 	URLs []string
 	// The canonical URL of the page, discovered by reading meta tags and following redirects.
 	Canonical string
+	// The content that was extracted from the page
+	Content ExtractedPageContent
+	// The ID of the page that was created or updated in the database
+	PageID int64
 }
 
-type pageContent struct {
-	canonical   string
-	status      database.QueueItemStatus
-	title       string
-	description string
-	content     string
-	errorInfo   string
+type ExtractedPageContent struct {
+	Canonical   string
+	Status      database.QueueItemStatus
+	Title       string
+	Description string
+	Content     string
+	ErrorInfo   string
 }
 
 func Crawl(source config.Source, currentDepth int32, referrer string, db database.Database, pageURL string) (*CrawlResult, error) {
@@ -48,12 +52,12 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		return nil, err
 	}
 
-	page := pageContent{canonical: parsedURL.String(), status: database.Unindexable}
+	page := ExtractedPageContent{Canonical: parsedURL.String(), Status: database.Unindexable}
 
-	if page.canonical != pageURL {
-		fmt.Printf("Crawling URL: %v (canonicalized from %v)\n", page.canonical, pageURL)
+	if page.Canonical != pageURL {
+		fmt.Printf("Crawling URL: %v (canonicalized from %v)\n", page.Canonical, pageURL)
 	} else {
-		fmt.Printf("Crawling URL: %v\n", page.canonical)
+		fmt.Printf("Crawling URL: %v\n", page.Canonical)
 	}
 	collector := colly.NewCollector()
 	collector.IgnoreRobotsTxt = false
@@ -84,8 +88,8 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		// Make sure the page doesn't disallow indexing
 		if robotsTag, exists := element.DOM.Find("meta[name=robots]").Attr("content"); exists {
 			if strings.Contains(robotsTag, "noindex") || strings.Contains(robotsTag, "none") {
-				page.status = database.Error
-				page.errorInfo = "Disallowed by <meta name=\"robots\">"
+				page.Status = database.Error
+				page.ErrorInfo = "Disallowed by <meta name=\"robots\">"
 				return
 			}
 		}
@@ -94,7 +98,7 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		description, _ := element.DOM.Find("meta[name=description]").Attr("content")
 
 		if metaCanonicalTag, exists := element.DOM.Find("link[rel=canonical]").Attr("href"); exists {
-			page.canonical = element.Request.AbsoluteURL(metaCanonicalTag)
+			page.Canonical = element.Request.AbsoluteURL(metaCanonicalTag)
 		}
 
 		// Find alternate links for RSS feeds, other languages, etc.
@@ -117,34 +121,34 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 			article.TextContent = getText(node)
 		}
 
-		page.status = database.Finished
-		page.title = strings.TrimSpace(element.DOM.Find("title").Text())
-		page.description = description
+		page.Status = database.Finished
+		page.Title = strings.TrimSpace(element.DOM.Find("title").Text())
+		page.Description = description
 
 		if err != nil || article.TextContent == "" {
 			// Readability couldn't parse the document. Instead,
 			// use a simpler heuristic to find text content.
 
-			page.content = ""
+			page.Content = ""
 			for _, item := range element.DOM.Nodes {
-				page.content += getText(item)
+				page.Content += getText(item)
 			}
 		} else {
-			if len(page.title) == 0 {
-				page.title = article.Title
+			if len(page.Title) == 0 {
+				page.Title = article.Title
 			}
-			page.content = article.TextContent
+			page.Content = article.TextContent
 		}
 	})
 
 	collector.OnResponse(func(resp *colly.Response) {
 		// The crawler follows redirects, so the canonical should be updated to match the final URL.
-		page.canonical = resp.Request.URL.String()
+		page.Canonical = resp.Request.URL.String()
 
 		// If the crawler followed a redirect from an unindexed document to an indexed document,
 		// parsing and adding it to the DB is unnecessary. We can just record the redirect as a canonical.
 		if origExists, _ := db.HasDocument(source.ID, pageURL); origExists != nil && !*origExists {
-			if exists, _ := db.HasDocument(source.ID, page.canonical); exists != nil && *exists {
+			if exists, _ := db.HasDocument(source.ID, page.Canonical); exists != nil && *exists {
 				cancelled = true
 				return
 			}
@@ -167,8 +171,8 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 			parser := gofeed.NewParser()
 			res, err := parser.ParseString(string(resp.Body))
 			if err != nil {
-				page.status = database.Error
-				page.errorInfo = "Invalid feed content"
+				page.Status = database.Error
+				page.ErrorInfo = "Invalid feed content"
 			}
 			for _, item := range res.Items {
 				for _, link := range item.Links {
@@ -183,28 +187,31 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		add(href)
 	})
 
-	err = collector.Visit(page.canonical)
+	err = collector.Visit(page.Canonical)
 
 	if err != nil {
-		page.errorInfo = err.Error()
+		page.ErrorInfo = err.Error()
 	}
 
+	// TODO timeout
 	collector.Wait()
 
 	result := &CrawlResult{
 		URLs:      maps.Keys(urls),
-		Canonical: page.canonical,
+		Canonical: page.Canonical,
+		Content:   page,
 	}
 
-	if page.canonical != pageURL {
-		err := db.SetCanonical(source.ID, pageURL, page.canonical)
+	if page.Canonical != pageURL {
+		err := db.SetCanonical(source.ID, pageURL, page.Canonical)
 		if err != nil {
-			fmt.Printf("Failed to set canonical URL of page %v to %v: %v\n", pageURL, page.canonical, err)
+			fmt.Printf("Failed to set canonical URL of page %v to %v: %v\n", pageURL, page.Canonical, err)
 		}
 	}
 
 	if !cancelled {
-		addDocErr := db.AddDocument(source.ID, currentDepth, referrer, page.canonical, page.status, page.title, page.description, page.content, page.errorInfo)
+		id, addDocErr := db.AddDocument(source.ID, currentDepth, referrer, page.Canonical, page.Status, page.Title, page.Description, page.Content, page.ErrorInfo)
+		result.PageID = id
 		if addDocErr != nil {
 			err = addDocErr
 		}
@@ -213,7 +220,12 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 	return result, err
 }
 
+// A list of elements that will never contain useful text and should always be filtered out when collecting text content.
 var nonTextElements = []string{"head", "meta", "script", "style", "noscript", "object", "svg"}
+
+// A list of all elements in the Chromium user-agent stylesheet with the `display: block` rule.
+// Source: https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/html/resources/html.css
+var blockLevelElements = []string{"html", "body", "p", "address", "article", "aside", "div", "footer", "header", "hgroup", "main", "nav", "section", "blockquote", "figcaption", "figure", "center", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "ul", "ol", "dd", "dl", "dt", "menu", "dir", "form", "legend", "fieldset", "optgroup", "option", "pre", "xmp", "plaintext", "listing", "dialog"}
 
 func getText(node *html.Node) string {
 	text := ""
@@ -226,6 +238,10 @@ func getText(node *html.Node) string {
 
 	if node.Type == html.TextNode {
 		text += node.Data + " "
+	}
+
+	if node.Type == html.ElementNode && slices.Contains(blockLevelElements, node.Data) {
+		text += "\n"
 	}
 
 	if node.NextSibling != nil {

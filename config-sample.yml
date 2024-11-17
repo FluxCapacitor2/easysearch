@@ -30,7 +30,8 @@ sources:
       - "www.bswanson.dev"
     # The maximum number of links the crawler will follow away from the base URL.
     maxDepth: 100
-    # The amount of requests **per minute** that the crawler will make to your site:
+    # The amount of requests **per minute** that the crawler will make to your site.
+    # This number is used to start a scheduled task, so don't set this number too high to conserve CPU cycles.
     speed: 30
     refresh:
       # Set `enabled` to `true` to recrawl old content after a certain amount of days.
@@ -38,3 +39,23 @@ sources:
       # The minimum amount of time between refreshes, **in days**.
       # In this example, pages are recrawled weekly.
       minAge: 7
+    embeddings:
+      enabled: true
+      # The maximum number of requests per minute to the embeddings API.
+      # This number is used to start a scheduled task, so don't set this number too high to conserve CPU cycles.
+      speed: 30
+
+# This section can be omitted if `embeddings.enabled` is set to `false` for all your sources.
+embeddings:
+  # Use OpenAI's embedding model:
+  # openaiBaseUrl: https://api.openai.com/v1/
+  # model: text-embedding-3-small
+  # dimensions: 1536
+
+  # You can also use any OpenAI-compatible API, like a local Ollama server:
+  openaiBaseUrl: http://localhost:11434/v1/
+  model: bge-m3
+  dimensions: 1024
+
+  chunkSize: 200
+  chunkOverlap: 30 # 15% overlap

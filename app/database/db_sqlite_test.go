@@ -14,7 +14,7 @@ func createDB(t *testing.T) Database {
 		t.Fatalf("database creation failed: %v", err)
 	}
 
-	if err := db.Setup(); err != nil {
+	if err := db.Setup(1536); err != nil {
 		t.Fatalf("database setup failed: %v", err)
 	}
 
@@ -152,6 +152,7 @@ func TestGetDocument(t *testing.T) {
 	db := createDB(t)
 
 	page := Page{
+		ID:          1,
 		Source:      "source1",
 		Referrer:    "",
 		URL:         "https://example.com/",
@@ -182,7 +183,7 @@ func TestGetDocument(t *testing.T) {
 func TestDeleteCanonicalsOnDeletePage(t *testing.T) {
 	db := createDB(t)
 
-	err := db.AddDocument("source1", 0, "", "https://example.com/", Finished, "Title", "Description", "Content", "")
+	_, err := db.AddDocument("source1", 0, "", "https://example.com/", Finished, "Title", "Description", "Content", "")
 	if err != nil {
 		t.Fatalf("failed to add page: %v", err)
 	}
@@ -208,7 +209,7 @@ func TestDeleteCanonicalsOnDeletePage(t *testing.T) {
 func TestSearchQuery(t *testing.T) {
 	db := createDB(t)
 
-	err := db.AddDocument("source1", 1, "", "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.", "")
+	_, err := db.AddDocument("source1", 1, "", "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.", "")
 	if err != nil {
 		t.Fatalf("error adding document: %v", err)
 	}
@@ -245,7 +246,7 @@ func TestSearchQuery(t *testing.T) {
 func TestQueuePagesOlderThan(t *testing.T) {
 	db := createDB(t)
 
-	err := db.AddDocument("source", 1, "", "", Finished, "", "", "", "")
+	_, err := db.AddDocument("source", 1, "", "", Finished, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error adding document: %v", err)
 	}
