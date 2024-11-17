@@ -2,6 +2,9 @@ FROM golang:1.22 AS builder
 
 WORKDIR /usr/src/app
 
+# Required for sqlite-vec to compile properly, even though it uses a portable version of SQLite at runtime
+RUN apt-get update && apt-get install -y libsqlite3-dev
+
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
