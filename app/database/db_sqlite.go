@@ -9,7 +9,6 @@ import (
 	_ "embed"
 
 	vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
-	"github.com/fluxcapacitor2/easysearch/app/config"
 	"github.com/fluxcapacitor2/easysearch/app/embedding"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
@@ -460,7 +459,7 @@ func (db *SQLiteDatabase) UpdateEmbedQueueEntry(id int64, status QueueItemStatus
 	}
 }
 
-func (db *SQLiteDatabase) Cleanup(config *config.Config) error {
+func (db *SQLiteDatabase) Cleanup() error {
 	_, err := db.conn.Exec(`
 		-- 1) Clear all Finished queue items (this is a sanity check; they should be immediately deleted from UpdateQueueEntry)
 		DELETE FROM crawl_queue WHERE status = ?;
@@ -477,10 +476,10 @@ func (db *SQLiteDatabase) Cleanup(config *config.Config) error {
 		DELETE FROM embed_queue WHERE page NOT IN (SELECT id FROM pages);
 		`, Finished, Pending, Processing, Finished, Pending, Error, Processing)
 
-	if err != nil {
-		return err
-	}
+	return err
+}
 
+func (db *SQLiteDatabase) StartEmbeddings(chunkSize int, chunkOverlap int) error {
 	// If a page has been indexed but has no embeddings, make sure an embedding job has been queued
 	rows, err := db.conn.Query("SELECT id, content FROM pages WHERE status = ? AND id NOT IN (SELECT page FROM vec_chunks) AND id NOT IN (SELECT page FROM embed_queue);", Finished)
 	if err != nil {
@@ -494,7 +493,7 @@ func (db *SQLiteDatabase) Cleanup(config *config.Config) error {
 			return err
 		}
 
-		chunks, err := embedding.ChunkText(content, config.Embeddings.ChunkSize, config.Embeddings.ChunkOverlap)
+		chunks, err := embedding.ChunkText(content, chunkSize, chunkOverlap)
 
 		if err != nil {
 			return fmt.Errorf("error chunking page: %v", err)
@@ -513,8 +512,7 @@ func (db *SQLiteDatabase) Cleanup(config *config.Config) error {
 			return fmt.Errorf("error adding page to embedding queue: %v", err)
 		}
 	}
-
-	return err
+	return nil
 }
 
 func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) error {

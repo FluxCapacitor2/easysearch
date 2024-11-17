@@ -45,14 +45,18 @@ func startQueueJob(db database.Database, config *config.Config) {
 		}
 	}
 
-	if err := db.Cleanup(config); err != nil {
+	if err := db.Cleanup(); err != nil {
 		fmt.Printf("error running Cleanup on startup: %v\n", err)
 	}
 
 	if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(5*time.Minute)), gocron.NewTask(func() {
-		err := db.Cleanup(config)
+		err := db.Cleanup()
 		if err != nil {
 			fmt.Printf("Error cleaning queue: %v\n", err)
+		}
+		err = db.StartEmbeddings(config.Embeddings.ChunkSize, config.Embeddings.ChunkOverlap)
+		if err != nil {
+			fmt.Printf("Error queueing pages that need embeddings: %v\n", err)
 		}
 	})); err != nil {
 		fmt.Printf("Failed to create cleanup job: %v\n", err)

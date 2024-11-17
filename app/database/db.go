@@ -1,13 +1,11 @@
 package database
 
-import "github.com/fluxcapacitor2/easysearch/app/config"
-
 type Database interface {
 	// Create necessary tables
 	Setup(vectorDimension int) error
 
 	// Set the status of items that have been Processing for over a minute to Pending and remove any Finished entries
-	Cleanup(config *config.Config) error
+	Cleanup() error
 
 	// Add a page to the search index.
 	AddDocument(source string, depth int32, referrer string, url string, status QueueItemStatus, title string, description string, content string, errorInfo string) (int64, error)
@@ -41,6 +39,9 @@ type Database interface {
 	PopEmbedQueue(source string) (*EmbedQueueItem, error)
 	UpdateEmbedQueueEntry(id int64, status QueueItemStatus) error
 	AddEmbedding(pageID int64, chunkIndex int, chunk string, vector []float32) error
+
+	// Adds pages with no embeddings to the embed queue
+	StartEmbeddings(chunkSize int, chunkOverlap int) error
 
 	SimilaritySearch(sources []string, query []float32, limit int) ([]SimilarityResult, error)
 }
