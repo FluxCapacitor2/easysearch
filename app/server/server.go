@@ -134,7 +134,7 @@ func Start(db database.Database, config *config.Config) {
 
 		if q != "" && src != nil && len(src) > 0 {
 
-			vector, err := embedding.GetEmbeddings(config.Embeddings.OpenAIBaseURL, config.Embeddings.Model, q)
+			vector, err := embedding.GetEmbeddings(config.Embeddings.OpenAIBaseURL, config.Embeddings.Model, config.Embeddings.APIKey, q)
 			if err != nil {
 				response = &httpResponse{
 					status:  500,

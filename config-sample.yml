@@ -51,6 +51,7 @@ embeddings:
   # openaiBaseUrl: https://api.openai.com/v1/
   # model: text-embedding-3-small
   # dimensions: 1536
+  # apiKey: sk-*************************************
 
   # You can also use any OpenAI-compatible API, like a local Ollama server:
   openaiBaseUrl: http://localhost:11434/v1/

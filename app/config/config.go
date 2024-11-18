@@ -17,6 +17,7 @@ type Config struct {
 	} `yaml:"db"`
 	Embeddings struct {
 		OpenAIBaseURL string `yaml:"openaiBaseUrl"`
+		APIKey        string `yaml:"apiKey"`
 		Model         string
 		Dimensions    int
 		ChunkSize     int `yaml:"chunkSize"`

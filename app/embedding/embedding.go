@@ -9,9 +9,9 @@ import (
 	"github.com/tmc/langchaingo/llms/openai"
 )
 
-func GetEmbeddings(openAIBaseURL string, model string, chunk string) ([]float32, error) {
+func GetEmbeddings(openAIBaseURL string, model string, apiKey string, chunk string) ([]float32, error) {
 
-	llm, err := openai.New(openai.WithBaseURL(openAIBaseURL), openai.WithEmbeddingModel(model))
+	llm, err := openai.New(openai.WithBaseURL(openAIBaseURL), openai.WithEmbeddingModel(model), openai.WithToken(apiKey))
 	if err != nil {
 		return nil, fmt.Errorf("error setting up LLM for embedding: %v", err)
 	}

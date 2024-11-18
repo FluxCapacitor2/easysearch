@@ -82,7 +82,7 @@ func processEmbedQueue(db database.Database, config *config.Config, src config.S
 		}
 	}
 
-	vector, err := embedding.GetEmbeddings(config.Embeddings.OpenAIBaseURL, config.Embeddings.Model, item.Content)
+	vector, err := embedding.GetEmbeddings(config.Embeddings.OpenAIBaseURL, config.Embeddings.Model, config.Embeddings.APIKey, item.Content)
 	if err != nil {
 		fmt.Printf("error getting embeddings: %v\n", err)
 		markFailure()
