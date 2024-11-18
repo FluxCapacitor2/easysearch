@@ -9,6 +9,11 @@
 -- * More accurate `k` limit when there are many sources that aren't included in the query
 -- * In the future, different sources could use different embedding sources with different vector sizes
 
+CREATE VIRTUAL TABLE IF NOT EXISTS pages_vec_%s USING vec0(
+  id INTEGER PRIMARY KEY,
+  embedding FLOAT[%d] distance_metric=cosine
+);
+
 CREATE TRIGGER IF NOT EXISTS pages_refresh_vector_embeddings_%s AFTER UPDATE ON pages
 WHEN old.url != new.url OR old.title != new.title OR old.description != new.description OR old.content != new.content BEGIN
   -- If the page has associated vector embeddings, they must be recomputed when the text changes
@@ -18,8 +23,3 @@ END;
 CREATE TRIGGER IF NOT EXISTS delete_embedding_on_delete_chunk_%s AFTER DELETE ON vec_chunks BEGIN
   DELETE FROM pages_vec_%s WHERE id = old.id;
 END;
-
-CREATE VIRTUAL TABLE IF NOT EXISTS pages_vec_%s USING vec0(
-  id INTEGER PRIMARY KEY,
-  embedding FLOAT[%d] distance_metric=cosine
-);

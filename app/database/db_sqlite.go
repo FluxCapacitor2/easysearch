@@ -33,7 +33,16 @@ func (db *SQLiteDatabase) Setup() error {
 }
 
 func (db *SQLiteDatabase) SetupVectorTables(sourceID string, dimensions int) error {
-	_, err := db.conn.Exec(fmt.Sprintf(embedSetupCommands, sourceID, sourceID, sourceID, sourceID, sourceID, dimensions))
+	_, err := db.conn.Exec(fmt.Sprintf(embedSetupCommands, sourceID, dimensions, sourceID, sourceID, sourceID, sourceID))
+	return err
+}
+
+func (db *SQLiteDatabase) DropVectorTables(sourceID string) error {
+	_, err := db.conn.Exec(fmt.Sprintf(`
+	DROP TABLE pages_vec_%s;
+	DROP TRIGGER pages_refresh_vector_embeddings_%s;
+	DROP TRIGGER delete_embedding_on_delete_chunk_%s;
+	`, sourceID, sourceID, sourceID))
 	return err
 }
 

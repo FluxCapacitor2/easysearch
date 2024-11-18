@@ -4,6 +4,7 @@ type Database interface {
 	// Create necessary tables
 	Setup() error
 	SetupVectorTables(sourceID string, dimension int) error
+	DropVectorTables(sourceID string) error
 
 	// Set the status of items that have been Processing for over a minute to Pending and remove any Finished entries
 	Cleanup() error
