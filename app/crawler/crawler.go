@@ -224,15 +224,26 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 var nonTextElements = []string{"head", "meta", "script", "style", "noscript", "object", "svg"}
 
 // A list of all elements in the Chromium user-agent stylesheet with the `display: block` rule.
-// Source: https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/html/resources/html.css
-var blockLevelElements = []string{"html", "body", "p", "address", "article", "aside", "div", "footer", "header", "hgroup", "main", "nav", "section", "blockquote", "figcaption", "figure", "center", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "ul", "ol", "dd", "dl", "dt", "menu", "dir", "form", "legend", "fieldset", "optgroup", "option", "pre", "xmp", "plaintext", "listing", "dialog"}
+var blockLevelElements = []string{
+	// Source: https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/html/resources/html.css
+	"html", "body", "p", "address", "article", "aside", "div", "footer", "header", "hgroup", "main", "nav", "section", "blockquote", "figcaption", "figure", "center", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "ul", "ol", "dd", "dl", "dt", "menu", "dir", "form", "legend", "fieldset", "optgroup", "option", "pre", "xmp", "plaintext", "listing", "dialog",
+	// Technically, list items aren't block-level elements, but they do create a new line.
+	"li",
+}
 
 func getText(node *html.Node) string {
 	text := ""
 
 	if node.FirstChild != nil {
 		if !slices.Contains(nonTextElements, node.Data) {
+			isBlock := node.Type == html.ElementNode && slices.Contains(blockLevelElements, node.Data)
+			if isBlock {
+				text += "\n"
+			}
 			text += getText(node.FirstChild) + " "
+			if isBlock {
+				text += "\n"
+			}
 		}
 	}
 
@@ -240,8 +251,19 @@ func getText(node *html.Node) string {
 		text += node.Data + " "
 	}
 
-	if node.Type == html.ElementNode && slices.Contains(blockLevelElements, node.Data) {
-		text += "\n"
+	for _, attr := range node.Attr {
+		if attr.Key == "title" && strings.TrimSpace(attr.Val) != "" {
+			text += attr.Val + " "
+		}
+	}
+
+	if node.Type == html.ElementNode && node.Data == "img" {
+		for _, attr := range node.Attr {
+			if attr.Key == "alt" && strings.TrimSpace(attr.Val) != "" {
+				text += attr.Val + "\n"
+				break
+			}
+		}
 	}
 
 	if node.NextSibling != nil {
