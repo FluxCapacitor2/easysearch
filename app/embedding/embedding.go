@@ -10,7 +10,10 @@ import (
 )
 
 func GetEmbeddings(openAIBaseURL string, model string, apiKey string, chunk string) ([]float32, error) {
-
+	if apiKey == "" {
+		// `langchaingo` emits an error when the OpenAI API key is empty, even if the API URL has been changed to one that doesn't require authentication.
+		apiKey = "-"
+	}
 	llm, err := openai.New(openai.WithBaseURL(openAIBaseURL), openai.WithEmbeddingModel(model), openai.WithToken(apiKey))
 	if err != nil {
 		return nil, fmt.Errorf("error setting up LLM for embedding: %v", err)

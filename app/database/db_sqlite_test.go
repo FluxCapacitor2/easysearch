@@ -5,16 +5,19 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 )
 
 func createDB(t *testing.T) Database {
+	vec.Auto()
 	db, err := SQLiteFromFile(path.Join(t.TempDir(), "temp.db"))
 
 	if err != nil {
 		t.Fatalf("database creation failed: %v", err)
 	}
 
-	if err := db.Setup(1536); err != nil {
+	if err := db.Setup(); err != nil {
 		t.Fatalf("database setup failed: %v", err)
 	}
 
@@ -23,6 +26,34 @@ func createDB(t *testing.T) Database {
 
 func TestSetup(t *testing.T) {
 	createDB(t)
+}
+
+func TestVecSetup(t *testing.T) {
+	db := createDB(t)
+	err := db.SetupVectorTables("1", 768)
+	if err != nil {
+		t.Fatalf("error setting up vector tables: %v\n", err)
+	}
+}
+
+func TestCleanup(t *testing.T) {
+	db := createDB(t)
+	err := db.Cleanup()
+	if err != nil {
+		t.Fatalf("error occurred in Cleanup: %v\n", err)
+	}
+}
+
+func TestStartEmbeddings(t *testing.T) {
+	db := createDB(t)
+	err := db.SetupVectorTables("1", 768)
+	if err != nil {
+		t.Fatalf("error creating vector table: %v\n", err)
+	}
+	err = db.StartEmbeddings(func(sourceID string) (chunkSize int, chunkOverlap int) { return 200, 30 })
+	if err != nil {
+		t.Fatalf("error occurred in StartEmbeddings: %v\n", err)
+	}
 }
 
 func TestEscape(t *testing.T) {

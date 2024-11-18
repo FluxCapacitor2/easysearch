@@ -54,7 +54,15 @@ func startQueueJob(db database.Database, config *config.Config) {
 		if err != nil {
 			fmt.Printf("Error cleaning queue: %v\n", err)
 		}
-		err = db.StartEmbeddings(config.Embeddings.ChunkSize, config.Embeddings.ChunkOverlap)
+
+		err = db.StartEmbeddings(func(sourceID string) (chunkSize int, chunkOverlap int) {
+			for _, src := range config.Sources {
+				if src.ID == sourceID {
+					return src.Embeddings.ChunkSize, src.Embeddings.ChunkOverlap
+				}
+			}
+			return 200, 30
+		})
 		if err != nil {
 			fmt.Printf("Error queueing pages that need embeddings: %v\n", err)
 		}
@@ -82,14 +90,14 @@ func processEmbedQueue(db database.Database, config *config.Config, src config.S
 		}
 	}
 
-	vector, err := embedding.GetEmbeddings(config.Embeddings.OpenAIBaseURL, config.Embeddings.Model, config.Embeddings.APIKey, item.Content)
+	vector, err := embedding.GetEmbeddings(src.Embeddings.OpenAIBaseURL, src.Embeddings.Model, src.Embeddings.APIKey, item.Content)
 	if err != nil {
 		fmt.Printf("error getting embeddings: %v\n", err)
 		markFailure()
 		return
 	}
 
-	err = db.AddEmbedding(item.PageID, item.ChunkIndex, item.Content, vector)
+	err = db.AddEmbedding(item.PageID, src.ID, item.ChunkIndex, item.Content, vector)
 	if err != nil {
 		fmt.Printf("error saving embedding: %v\n", err)
 		markFailure()
@@ -138,7 +146,7 @@ func processCrawlQueue(db database.Database, config *config.Config, src config.S
 	} else {
 		// Chunk the page into sections and add it to the embedding queue
 		if result.PageID > 0 {
-			chunks, err := embedding.ChunkText(result.Content.Content, config.Embeddings.ChunkSize, config.Embeddings.ChunkOverlap)
+			chunks, err := embedding.ChunkText(result.Content.Content, src.Embeddings.ChunkSize, src.Embeddings.ChunkOverlap)
 
 			if err != nil {
 				fmt.Printf("error chunking page: %v\n", err)

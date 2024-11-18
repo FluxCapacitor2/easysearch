@@ -45,18 +45,16 @@ sources:
       # This number is used to start a scheduled task, so don't set this number too high to conserve CPU cycles.
       speed: 30
 
-# This section can be omitted if `embeddings.enabled` is set to `false` for all your sources.
-embeddings:
-  # Use OpenAI's embedding model:
-  # openaiBaseUrl: https://api.openai.com/v1/
-  # model: text-embedding-3-small
-  # dimensions: 1536
-  # apiKey: sk-*************************************
+      # Use OpenAI's embedding model:
+      # openaiBaseUrl: https://api.openai.com/v1/
+      # model: text-embedding-3-small
+      # dimensions: 1536
+      # apiKey: sk-*************************************
 
-  # You can also use any OpenAI-compatible API, like a local Ollama server:
-  openaiBaseUrl: http://localhost:11434/v1/
-  model: bge-m3
-  dimensions: 1024
+      # You can also use any OpenAI-compatible API, like a local Ollama server:
+      openaiBaseUrl: http://localhost:11434/v1/
+      model: bge-m3
+      dimensions: 1024
 
-  chunkSize: 200
-  chunkOverlap: 30 # 15% overlap
+      chunkSize: 200
+      chunkOverlap: 30 # 15% overlap

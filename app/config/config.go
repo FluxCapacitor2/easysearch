@@ -15,14 +15,6 @@ type Config struct {
 		Driver           string
 		ConnectionString string `yaml:"connectionString"`
 	} `yaml:"db"`
-	Embeddings struct {
-		OpenAIBaseURL string `yaml:"openaiBaseUrl"`
-		APIKey        string `yaml:"apiKey"`
-		Model         string
-		Dimensions    int
-		ChunkSize     int `yaml:"chunkSize"`
-		ChunkOverlap  int `yaml:"chunkOverlap"`
-	}
 	Sources     []Source
 	ResultsPage ResultsPageConfig `yaml:"resultsPage"`
 }
@@ -58,7 +50,13 @@ type Source struct {
 	Embeddings struct {
 		Enabled bool
 		// The maximum number of requests per minute to the embeddings API
-		Speed int
+		Speed         int
+		OpenAIBaseURL string `yaml:"openaiBaseUrl"`
+		APIKey        string `yaml:"apiKey"`
+		Model         string
+		Dimensions    int
+		ChunkSize     int `yaml:"chunkSize"`
+		ChunkOverlap  int `yaml:"chunkOverlap"`
 	}
 }
 

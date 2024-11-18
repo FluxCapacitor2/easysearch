@@ -24,9 +24,16 @@ type SQLiteDatabase struct {
 //go:embed db_sqlite_setup.sql
 var setupCommands string
 
-func (db *SQLiteDatabase) Setup(vectorDimension int) error {
-	vec.Auto() // Load the `sqlite-vec` extension
-	_, err := db.conn.Exec(fmt.Sprintf(setupCommands, vectorDimension))
+//go:embed db_sqlite_embedding.sql
+var embedSetupCommands string
+
+func (db *SQLiteDatabase) Setup() error {
+	_, err := db.conn.Exec(setupCommands)
+	return err
+}
+
+func (db *SQLiteDatabase) SetupVectorTables(sourceID string, dimensions int) error {
+	_, err := db.conn.Exec(fmt.Sprintf(embedSetupCommands, sourceID, sourceID, sourceID, sourceID, sourceID, dimensions))
 	return err
 }
 
@@ -251,37 +258,24 @@ func processResult(input string, start string, end string) []Match {
 	}
 }
 
-func (db *SQLiteDatabase) SimilaritySearch(sources []string, query []float32, limit int) ([]SimilarityResult, error) {
+func (db *SQLiteDatabase) SimilaritySearch(sourceID string, query []float32, limit int) ([]SimilarityResult, error) {
 
 	serialized, err := vec.SerializeFloat32(query)
 	if err != nil {
 		return nil, err
 	}
 
-	args := []any{serialized}
-	for _, src := range sources {
-		args = append(args, src)
-	}
-	args = append(args, Finished, limit, limit*5)
-
-	// TODO: In this query, we use `k = limit * 5` to select the first 5N results and then limit them to N with a LIMIT clause.
-	//       When `sqlite-vec` adds support for metadata columns in the next release, this workaround will be unnecessary
-	//       and we can filter the sources directly.
-
-	sourcesString := strings.Repeat("?, ", len(sources)-1) + "?"
-
 	rows, err := db.conn.Query(fmt.Sprintf(`
-	SELECT pages_vec.distance, pages.url, pages.title, vec_chunks.chunk FROM pages_vec
+	SELECT pages_vec_%s.distance, pages.url, pages.title, vec_chunks.chunk FROM pages_vec_%s
 	JOIN vec_chunks USING (id)
 	JOIN pages ON pages.id = vec_chunks.page
 	WHERE
-		pages_vec.embedding MATCH ? AND
-		pages.source IN (%s) AND
+		pages_vec_%s.embedding MATCH ? AND
 		pages.status = ? AND
 		k = ?
-	ORDER BY pages_vec.distance
+	ORDER BY pages_vec_%s.distance
 	LIMIT ?;
-	`, sourcesString), args...)
+	`, sourceID, sourceID, sourceID, sourceID), serialized, Finished, limit, limit)
 
 	if err != nil {
 		return nil, err
@@ -401,7 +395,7 @@ func (db *SQLiteDatabase) PopEmbedQueue(source string) (*EmbedQueueItem, error) 
 	return item, nil
 }
 
-func (db *SQLiteDatabase) AddEmbedding(pageID int64, chunkIndex int, chunk string, vector []float32) error {
+func (db *SQLiteDatabase) AddEmbedding(pageID int64, sourceID string, chunkIndex int, chunk string, vector []float32) error {
 	serialized, err := vec.SerializeFloat32(vector)
 	if err != nil {
 		return err
@@ -424,7 +418,7 @@ func (db *SQLiteDatabase) AddEmbedding(pageID int64, chunkIndex int, chunk strin
 		return err
 	}
 
-	_, err = tx.Exec("INSERT INTO pages_vec (id, embedding) VALUES (?, ?);", id, serialized)
+	_, err = tx.Exec(fmt.Sprintf("INSERT INTO pages_vec_%s (id, embedding) VALUES (?, ?);", sourceID), id, serialized)
 	if err != nil {
 		if err := tx.Rollback(); err != nil {
 			return err
@@ -479,20 +473,22 @@ func (db *SQLiteDatabase) Cleanup() error {
 	return err
 }
 
-func (db *SQLiteDatabase) StartEmbeddings(chunkSize int, chunkOverlap int) error {
+func (db *SQLiteDatabase) StartEmbeddings(getChunkDetails func(sourceID string) (chunkSize int, chunkOverlap int)) error {
 	// If a page has been indexed but has no embeddings, make sure an embedding job has been queued
-	rows, err := db.conn.Query("SELECT id, content FROM pages WHERE status = ? AND id NOT IN (SELECT page FROM vec_chunks) AND id NOT IN (SELECT page FROM embed_queue);", Finished)
+	rows, err := db.conn.Query("SELECT id, source, content FROM pages WHERE status = ? AND id NOT IN (SELECT page FROM vec_chunks) AND id NOT IN (SELECT page FROM embed_queue);", Finished)
 	if err != nil {
 		return fmt.Errorf("error finding pages without embeddings: %v", err)
 	}
 	for rows.Next() {
 		var id int64
+		var sourceID string
 		var content string
-		err := rows.Scan(&id, &content)
+		err := rows.Scan(&id, &sourceID, &content)
 		if err != nil {
 			return err
 		}
 
+		chunkSize, chunkOverlap := getChunkDetails(sourceID)
 		chunks, err := embedding.ChunkText(content, chunkSize, chunkOverlap)
 
 		if err != nil {
@@ -563,13 +559,14 @@ func (db *SQLiteDatabase) SetCanonical(source string, url string, canonical stri
 }
 
 func SQLiteFromFile(fileName string) (*SQLiteDatabase, error) {
+	vec.Auto() // Load the `sqlite-vec` extension
 	conn, err := sql.Open("sqlite3", fileName)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &SQLiteDatabase{conn}, nil
+	return SQLite(conn)
 }
 
 func SQLite(conn *sql.DB) (*SQLiteDatabase, error) {

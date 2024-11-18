@@ -107,11 +107,6 @@ CREATE TABLE IF NOT EXISTS vec_chunks(
 
 CREATE UNIQUE INDEX IF NOT EXISTS vec_chunks_page_chunk_unique ON vec_chunks(page, chunkIndex);
 
-CREATE VIRTUAL TABLE IF NOT EXISTS pages_vec USING vec0(
-  id INTEGER PRIMARY KEY,
-  embedding FLOAT[%d] distance_metric=cosine -- This number is populated based on the config
-);
-
 CREATE TABLE IF NOT EXISTS embed_queue(
   id INTEGER PRIMARY KEY,
   page INTEGER NOT NULL,
@@ -124,13 +119,3 @@ CREATE TABLE IF NOT EXISTS embed_queue(
 ) STRICT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS embed_queue_page_chunk_unique ON embed_queue(page, chunkIndex);
-
-CREATE TRIGGER IF NOT EXISTS pages_refresh_vector_embeddings AFTER UPDATE ON pages
-WHEN old.url != new.url OR old.title != new.title OR old.description != new.description OR old.content != new.content BEGIN
-  -- If the page has associated vector embeddings, they must be recomputed when the text changes
-  DELETE FROM pages_vec WHERE rowid IN (SELECT * FROM vec_chunks WHERE page = old.id);
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_embedding_on_delete_chunk AFTER DELETE ON vec_chunks BEGIN
-  DELETE FROM pages_vec WHERE id = old.id;
-END;

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -28,9 +29,9 @@ type paginationInfo struct {
 	Total    uint32 `json:"total"`
 }
 
-func Start(db database.Database, config *config.Config) {
+func Start(db database.Database, cfg *config.Config) {
 
-	if config.ResultsPage.Enabled {
+	if cfg.ResultsPage.Enabled {
 
 		http.Handle("/static/", http.FileServerFS(content))
 		t, err := template.ParseFS(content, "templates/*.tmpl")
@@ -40,7 +41,7 @@ func Start(db database.Database, config *config.Config) {
 		}
 
 		http.HandleFunc("/{$}", func(w http.ResponseWriter, req *http.Request) {
-			renderTemplateWithResults(db, config, req, w, t, "index")
+			renderTemplateWithResults(db, cfg, req, w, t, "index")
 		})
 
 		http.HandleFunc("/results", func(w http.ResponseWriter, req *http.Request) {
@@ -55,7 +56,7 @@ func Start(db database.Database, config *config.Config) {
 				w.Header().Set("HX-Replace-URL", url.String())
 			}
 
-			renderTemplateWithResults(db, config, req, w, t, "results")
+			renderTemplateWithResults(db, cfg, req, w, t, "results")
 		})
 	}
 
@@ -70,7 +71,7 @@ func Start(db database.Database, config *config.Config) {
 		}
 
 		timeStart := time.Now().UnixMicro()
-		var response *httpResponse
+		var response httpResponse
 
 		src := req.URL.Query()["source"]
 		q := req.URL.Query().Get("q")
@@ -79,7 +80,7 @@ func Start(db database.Database, config *config.Config) {
 		if q != "" && src != nil && len(src) > 0 && err == nil {
 			results, total, err := db.Search(src, q, uint32(page), 10)
 			if err != nil {
-				response = &httpResponse{
+				response = httpResponse{
 					status:  500,
 					Success: false,
 					Error:   "Internal server error",
@@ -87,7 +88,7 @@ func Start(db database.Database, config *config.Config) {
 
 				fmt.Printf("Error generating search results: %v\n", err)
 			} else {
-				response = &httpResponse{
+				response = httpResponse{
 					status:  200,
 					Success: true,
 					Results: results,
@@ -99,7 +100,7 @@ func Start(db database.Database, config *config.Config) {
 				}
 			}
 		} else {
-			response = &httpResponse{
+			response = httpResponse{
 				status:  400,
 				Success: false,
 				Error:   "Bad request",
@@ -127,60 +128,89 @@ func Start(db database.Database, config *config.Config) {
 		}
 
 		timeStart := time.Now().UnixMicro()
-		var response *httpResponse
+
+		respond := func(response httpResponse) {
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(int(response.status))
+			response.ResponseTime = float64(time.Now().UnixMicro()-timeStart) / 1e6
+			str, err := json.Marshal(response)
+			if err != nil {
+				w.Write([]byte(`{"success":"false","error":"Failed to marshal struct into JSON"}`))
+			} else {
+				w.Write([]byte(str))
+			}
+		}
 
 		src := req.URL.Query()["source"]
 		q := req.URL.Query().Get("q")
 
-		if q != "" && src != nil && len(src) > 0 {
-
-			vector, err := embedding.GetEmbeddings(config.Embeddings.OpenAIBaseURL, config.Embeddings.Model, config.Embeddings.APIKey, q)
-			if err != nil {
-				response = &httpResponse{
-					status:  500,
-					Success: false,
-					Error:   "Internal server error",
-				}
-
-				fmt.Printf("Error generating embeddings for search query: %v\n", err)
-			} else {
-				results, err := db.SimilaritySearch(src, vector, 10)
-				if err != nil {
-					response = &httpResponse{
-						status:  500,
-						Success: false,
-						Error:   "Internal server error",
-					}
-
-					fmt.Printf("Error generating search results: %v\n", err)
-				} else {
-					response = &httpResponse{
-						status:  200,
-						Success: true,
-						Results: results,
-					}
-				}
-			}
-		} else {
-			response = &httpResponse{
+		if q == "" || src == nil || len(src) == 0 {
+			respond(httpResponse{
 				status:  400,
 				Success: false,
 				Error:   "Bad request",
+			})
+			return
+		}
+
+		foundSources := make([]config.Source, 0, len(src))
+
+		for _, sourceID := range src {
+			for _, s := range cfg.Sources {
+				if s.ID == sourceID {
+					foundSources = append(foundSources, s)
+					break
+				}
 			}
 		}
 
-		w.Header().Add("Content-Type", "application/json")
-		w.WriteHeader(int(response.status))
-		response.ResponseTime = float64(time.Now().UnixMicro()-timeStart) / 1e6
-		str, err := json.Marshal(response)
-		if err != nil {
-			w.Write([]byte(`{"success":"false","error":"Failed to marshal struct into JSON"}`))
-		} else {
-			w.Write([]byte(str))
+		queryEmbeds := make(map[string][]float32)
+
+		for _, s := range foundSources {
+			if s.Embeddings.Enabled && queryEmbeds[s.Embeddings.Model] == nil {
+				vector, err := embedding.GetEmbeddings(s.Embeddings.OpenAIBaseURL, s.Embeddings.Model, s.Embeddings.APIKey, q)
+				if err != nil {
+					fmt.Printf("Error getting embeddings for search query: %v\n", err)
+					respond(httpResponse{
+						status:  500,
+						Success: false,
+						Error:   "Internal server error",
+					})
+					return
+				}
+				queryEmbeds[s.Embeddings.Model] = vector
+
+			}
 		}
+
+		allResults := make([]database.SimilarityResult, 0)
+
+		for _, s := range foundSources {
+			results, err := db.SimilaritySearch(s.ID, queryEmbeds[s.Embeddings.Model], 10)
+			if err != nil {
+				fmt.Printf("Error generating search results: %v\n", err)
+				respond(httpResponse{
+					status:  500,
+					Success: false,
+					Error:   "Internal server error",
+				})
+				return
+			}
+			allResults = append(allResults, results...)
+		}
+
+		slices.SortFunc(allResults, func(a database.SimilarityResult, b database.SimilarityResult) int {
+			return cmp.Compare(a.Similarity, b.Similarity)
+		})
+
+		respond(httpResponse{
+			status:  200,
+			Success: true,
+			Results: allResults,
+		})
 	})
 
-	addr := fmt.Sprintf("%v:%v", config.HTTP.Listen, config.HTTP.Port)
+	addr := fmt.Sprintf("%v:%v", cfg.HTTP.Listen, cfg.HTTP.Port)
 	fmt.Printf("Listening on http://%v\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

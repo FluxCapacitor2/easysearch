@@ -44,10 +44,19 @@ func main() {
 
 	{
 		// Create DB tables if they don't exist (and set SQLite to WAL mode)
-		err := db.Setup(config.Embeddings.Dimensions)
+		err := db.Setup()
 
 		if err != nil {
 			panic(fmt.Sprintf("Failed to set up database: %v", err))
+		}
+
+		for _, src := range config.Sources {
+			if src.Embeddings.Enabled {
+				err := db.SetupVectorTables(src.ID, src.Embeddings.Dimensions)
+				if err != nil {
+					panic(fmt.Sprintf("Failed to set up embeddings database tables for source %v: %v", src.ID, err))
+				}
+			}
 		}
 	}
 

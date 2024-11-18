@@ -2,7 +2,8 @@ package database
 
 type Database interface {
 	// Create necessary tables
-	Setup(vectorDimension int) error
+	Setup() error
+	SetupVectorTables(sourceID string, dimension int) error
 
 	// Set the status of items that have been Processing for over a minute to Pending and remove any Finished entries
 	Cleanup() error
@@ -38,12 +39,12 @@ type Database interface {
 	AddToEmbedQueue(id int64, chunks []string) error
 	PopEmbedQueue(source string) (*EmbedQueueItem, error)
 	UpdateEmbedQueueEntry(id int64, status QueueItemStatus) error
-	AddEmbedding(pageID int64, chunkIndex int, chunk string, vector []float32) error
+	AddEmbedding(pageID int64, sourceID string, chunkIndex int, chunk string, vector []float32) error
 
 	// Adds pages with no embeddings to the embed queue
-	StartEmbeddings(chunkSize int, chunkOverlap int) error
+	StartEmbeddings(getChunkDetails func(sourceID string) (chunkSize int, chunkOverlap int)) error
 
-	SimilaritySearch(sources []string, query []float32, limit int) ([]SimilarityResult, error)
+	SimilaritySearch(sourceID string, query []float32, limit int) ([]SimilarityResult, error)
 }
 
 type Page struct {
