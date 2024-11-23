@@ -34,6 +34,8 @@ type Source struct {
 	URL string `yaml:"url"`
 	// The maximum amount of requests per minute that can be made to this source.
 	Speed int32
+	// The maximum amount of text content to index per page, in bytes
+	SizeLimit int `yaml:"sizeLimit"`
 
 	AllowedDomains []string `yaml:"allowedDomains"`
 

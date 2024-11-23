@@ -211,7 +211,8 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 	}
 
 	if !cancelled {
-		id, addDocErr := db.AddDocument(source.ID, currentDepth, referrer, page.Canonical, page.Status, page.Title, page.Description, page.Content, page.ErrorInfo)
+		text := Truncate(source.SizeLimit, page.Title, page.Description, page.Content)
+		id, addDocErr := db.AddDocument(source.ID, currentDepth, referrer, page.Canonical, page.Status, text[0], text[1], text[2], page.ErrorInfo)
 		result.PageID = id
 		if addDocErr != nil {
 			err = addDocErr
@@ -219,6 +220,26 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 	}
 
 	return result, err
+}
+
+func Truncate(max int, items ...string) []string {
+	ret := make([]string, len(items))
+	remaining := max
+
+	for i, item := range items {
+		if len(item) <= remaining {
+			ret[i] = item
+			remaining -= len(item)
+		} else if remaining > 0 {
+			added := item[:remaining]
+			ret[i] = added
+			remaining -= len(added)
+		} else {
+			ret[i] = ""
+		}
+	}
+
+	return ret
 }
 
 // A list of elements that will never contain useful text and should always be filtered out when collecting text content.

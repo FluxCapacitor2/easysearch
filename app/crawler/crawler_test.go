@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"path"
+	"reflect"
 	"testing"
 
 	"github.com/fluxcapacitor2/easysearch/app/config"
@@ -130,5 +131,29 @@ func TestSitemap(t *testing.T) {
 
 	if len(res.URLs) < 20 {
 		t.Errorf("sitemap URLs were not discovered - expected >=20 URLs, got %+v\n", res)
+	}
+}
+
+func TestTruncate(t *testing.T) {
+
+	tests := []struct {
+		max      int
+		strings  []string
+		expected []string
+	}{
+		{5, []string{"123", "45", "6"}, []string{"123", "45", ""}},
+		{6, []string{"123", "45", "6"}, []string{"123", "45", "6"}},
+		{10, []string{"123", "45", "6"}, []string{"123", "45", "6"}},
+		{2, []string{"123", "45", "6"}, []string{"12", "", ""}},
+		{5, []string{"lorem ipsum"}, []string{"lorem"}},
+		{5, []string{"lorem", "", "", "", "", "", "ipsum"}, []string{"lorem", "", "", "", "", "", ""}},
+		{10, []string{"lorem", "", "", "", "", "", "ipsum"}, []string{"lorem", "", "", "", "", "", "ipsum"}},
+	}
+
+	for _, test := range tests {
+		result := Truncate(test.max, test.strings...)
+		if !reflect.DeepEqual(result, test.expected) {
+			t.Fatalf("incorrect Truncate result - expected %#v, got %#v\n", test.expected, result)
+		}
 	}
 }

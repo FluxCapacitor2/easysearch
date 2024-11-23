@@ -39,6 +39,8 @@ sources:
       # The minimum amount of time between refreshes, **in days**.
       # In this example, pages are recrawled weekly.
       minAge: 7
+    # The maximum amount of text content to index per page, in characters
+    sizeLimit: 200000 # Content will be truncated after 200,000 characters
     embeddings:
       enabled: true
       # The maximum number of requests per minute to the embeddings API.

@@ -1,7 +1,6 @@
 package embedding
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -10,8 +9,6 @@ func TestChunkText(t *testing.T) {
 
 	for chunkSize := 5; chunkSize < 50; chunkSize += 5 {
 		for overlap := 0; overlap <= chunkSize/2; overlap++ {
-			fmt.Printf("testing chunking with size = %v and overlap = %v\n", chunkSize, overlap)
-
 			results, err := ChunkText(text, chunkSize, overlap)
 
 			if err != nil {
