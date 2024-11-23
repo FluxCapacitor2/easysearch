@@ -4,3 +4,4 @@
 .env*
 config.yml
 node_modules
+__debug_bin*

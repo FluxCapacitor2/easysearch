@@ -7,7 +7,7 @@
 -- Why use separate tables for each source?
 -- * Faster query times when there are many sources with lots of embeddings that aren't included in the user's query
 -- * More accurate `k` limit when there are many sources that aren't included in the query
--- * In the future, different sources could use different embedding sources with different vector sizes
+-- * Allows different sources to use different embedding sources with different vector sizes
 
 CREATE VIRTUAL TABLE IF NOT EXISTS pages_vec_%s USING vec0(
   id INTEGER PRIMARY KEY,

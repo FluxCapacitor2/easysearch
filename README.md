@@ -35,8 +35,6 @@ This is a FOSS alternative to the aforementioned products that addresses my prim
 - [x] Implementing something like Readability (or at least removing the contents of non-text resources)
 - [ ] SPA support using a headless browser
 - [x] Guarantee that pages in the queue are only crawled once, even in distributed scenarios
-- [ ] Postgres support
-- [ ] MySQL support
 - [ ] Prebuilt components for React, Vue, Svelte, etc.
 - [ ] Exponential backoff for crawl errors
 - [x] Vector search
@@ -65,9 +63,11 @@ git clone https://github.com/FluxCapacitor2/easysearch
 go run --tags="fts5" ./app
 ```
 
+_If you are using VS Code, you can press F5 to run the project automatically._
+
 <small>
 
-**Note**: When using SQLite, you have to add a build tag to enable full-text search with the [`fts5` extension](https://sqlite.org/fts5.html) (see [this section](https://github.com/mattn/go-sqlite3/tree/master?tab=readme-ov-file#feature--extension-list) of the `go-sqlite3` README for more info). That is why the `--tags="fts5"` flag is present. If you're only using Postgres, you can remove the flag for a slightly faster build.
+**Note**: You have to add the `fts5` Go build tag to enable full-text search with the [`fts5` extension](https://sqlite.org/fts5.html), which Easysearch requires. See [this section](https://github.com/mattn/go-sqlite3/tree/master?tab=readme-ov-file#feature--extension-list) of the `go-sqlite3` README for more info.
 
 </small>
 

@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "name": "Run Easysearch",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/app",
+      "buildFlags": ["-tags", "fts5", "-race"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
