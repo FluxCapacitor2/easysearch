@@ -60,6 +60,7 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		fmt.Printf("Crawling URL: %v\n", page.Canonical)
 	}
 	collector := colly.NewCollector()
+	collector.UserAgent = "Easysearch (+https://github.com/FluxCapacitor2/easysearch)"
 	collector.IgnoreRobotsTxt = false
 	collector.AllowedDomains = source.AllowedDomains
 
