@@ -47,8 +47,6 @@ Easysearch requires a config file located at `./config.yml` in the current worki
 
 See the example in [config-sample.yml](https://github.com/FluxCapacitor2/easysearch/blob/main/config-sample.yml) for more information.
 
-**Note**: If you are using an API for vector embeddings that does not require an API key, you still need to add the `OPENAI_API_KEY` environment variable. It cannot be empty, but it can be any random string.
-
 ## Development
 
 1. Clone the repository:

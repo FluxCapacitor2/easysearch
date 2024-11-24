@@ -443,11 +443,13 @@ func (db *SQLiteDatabase) HybridSearch(sources []string, queryString string, emb
 
 	for rows.Next() {
 		res := HybridResult{}
-		var content string
-		err := rows.Scan(&res.URL, &res.Title, &res.Description, &content, &res.VecDistance, &res.VecRank, &res.FTSRank, &res.HybridRank)
+		var title, description, content string
+		err := rows.Scan(&res.URL, &title, &description, &content, &res.VecDistance, &res.VecRank, &res.FTSRank, &res.HybridRank)
 		if err != nil {
 			return nil, err
 		}
+		res.Title = processResult(title, start, end)
+		res.Description = processResult(description, start, end)
 		res.Content = processResult(content, start, end)
 		results = append(results, res)
 	}

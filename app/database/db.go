@@ -80,8 +80,8 @@ type SimilarityResult struct {
 
 type HybridResult struct {
 	URL         string   `json:"url"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
+	Title       []Match  `json:"title"`
+	Description []Match  `json:"description"`
 	Content     []Match  `json:"content"`
 	FTSRank     *int     `json:"ftsRank"`
 	VecRank     *int     `json:"vecRank"`
