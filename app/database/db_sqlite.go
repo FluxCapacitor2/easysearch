@@ -449,7 +449,6 @@ func (db *SQLiteDatabase) HybridSearch(sources []string, queryString string, emb
 			return nil, err
 		}
 		res.Content = processResult(content, start, end)
-		// res.Content = []Match{{Content: content, Highlighted: false}}
 		results = append(results, res)
 	}
 

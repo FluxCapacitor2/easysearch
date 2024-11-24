@@ -43,7 +43,7 @@
     {{- end -}}
 
 
-    <p class="count">{{- .Total -}} results found in {{- .Time -}}s.</p>
+    <p class="count">{{- .Total }} results found in {{ .Time -}}s.</p>
   {{- else if .Query -}}
     No results found.
   {{- end -}}
