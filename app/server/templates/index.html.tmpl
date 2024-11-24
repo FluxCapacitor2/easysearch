@@ -1,4 +1,4 @@
-{{ define "index" }}
+{{- define "index" -}}
   <!doctype html>
   <html>
     <head>
@@ -28,7 +28,7 @@
         crossorigin="anonymous"
         defer
       ></script>
-      {{ .CustomHTML }}
+      {{- .CustomHTML -}}
     </head>
     <body class="inter-regular">
       <main class="container">
@@ -44,26 +44,26 @@
           <h1>Search</h1>
           <p>
             Include results from:
-            {{ range $index, $value := .Sources }}
+            {{- range $index, $value := .Sources -}}
               <label>
                 <input
                   type="checkbox"
                   name="source"
-                  value="{{ $value.ID }}"
-                  {{ if $value.Enabled }}
+                  value="{{- $value.ID -}}"
+                  {{- if $value.Enabled -}}
                     checked
-                  {{ end }}
+                  {{- end -}}
                 />
-                {{ $value.ID }}
+                {{- $value.ID -}}
               </label>
-            {{ end }}
+            {{- end -}}
           </p>
           <div class="row">
             <input
               type="search"
               name="q"
               placeholder="Search..."
-              value="{{ .Query }}"
+              value="{{- .Query -}}"
             />
             <noscript>
               <button type="submit" class="search-button">Search</button>
@@ -72,9 +72,9 @@
           <input type="hidden" name="page" value="1" />
         </form>
         <div id="results">
-          {{ template "results" . }}
+          {{- template "results" . -}}
         </div>
       </main>
     </body>
   </html>
-{{ end }}
+{{- end -}}

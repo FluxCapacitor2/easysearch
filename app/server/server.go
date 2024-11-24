@@ -210,6 +210,102 @@ func Start(db database.Database, cfg *config.Config) {
 		})
 	})
 
+	http.HandleFunc("/api/hybrid-search", func(w http.ResponseWriter, req *http.Request) {
+		type httpResponse struct {
+			status       int16
+			Success      bool                    `json:"success"`
+			Error        string                  `json:"error,omitempty"`
+			Results      []database.HybridResult `json:"results"`
+			ResponseTime float64                 `json:"responseTime"`
+		}
+
+		timeStart := time.Now().UnixMicro()
+
+		respond := func(response httpResponse) {
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(int(response.status))
+			response.ResponseTime = float64(time.Now().UnixMicro()-timeStart) / 1e6
+			str, err := json.Marshal(response)
+			if err != nil {
+				w.Write([]byte(`{"success":"false","error":"Failed to marshal struct into JSON"}`))
+			} else {
+				w.Write([]byte(str))
+			}
+		}
+
+		src := req.URL.Query()["source"]
+		q := req.URL.Query().Get("q")
+
+		if q == "" || src == nil || len(src) == 0 {
+			respond(httpResponse{
+				status:  400,
+				Success: false,
+				Error:   "Bad request",
+			})
+			return
+		}
+
+		foundSources := make([]config.Source, 0, len(src))
+
+		for _, sourceID := range src {
+			for _, s := range cfg.Sources {
+				if s.ID == sourceID {
+					foundSources = append(foundSources, s)
+					break
+				}
+			}
+		}
+
+		queryEmbeds := make(map[string][]float32)
+
+		for _, s := range foundSources {
+			if s.Embeddings.Enabled && queryEmbeds[s.Embeddings.Model] == nil {
+				vector, err := embedding.GetEmbeddings(s.Embeddings.OpenAIBaseURL, s.Embeddings.Model, s.Embeddings.APIKey, q)
+				if err != nil {
+					fmt.Printf("Error getting embeddings for search query: %v\n", err)
+					respond(httpResponse{
+						status:  500,
+						Success: false,
+						Error:   "Internal server error",
+					})
+					return
+				}
+				queryEmbeds[s.Embeddings.Model] = vector
+
+			}
+		}
+
+		embeddedQueries := make(map[string][]float32)
+
+		for _, s := range foundSources {
+			if s.Embeddings.Enabled {
+				embeddedQueries[s.ID] = queryEmbeds[s.Embeddings.Model]
+			}
+		}
+
+		sourceList := make([]string, 0)
+		for _, s := range foundSources {
+			sourceList = append(sourceList, s.ID)
+		}
+
+		results, err := db.HybridSearch(sourceList, q, embeddedQueries, 10)
+		if err != nil {
+			fmt.Printf("Error generating search results: %v\n", err)
+			respond(httpResponse{
+				status:  500,
+				Success: false,
+				Error:   "Internal server error",
+			})
+			return
+		}
+
+		respond(httpResponse{
+			status:  200,
+			Success: true,
+			Results: results,
+		})
+	})
+
 	addr := fmt.Sprintf("%v:%v", cfg.HTTP.Listen, cfg.HTTP.Port)
 	fmt.Printf("Listening on http://%v\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))

@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"regexp"
 
 	"gopkg.in/yaml.v3"
 )
@@ -62,6 +64,8 @@ type Source struct {
 	}
 }
 
+var sourceIDPattern = regexp.MustCompile("^[a-zA-Z0-9_]+$")
+
 func Read() (*Config, error) {
 
 	data, err := os.ReadFile("./config.yml")
@@ -74,6 +78,14 @@ func Read() (*Config, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Validate the loaded configuration
+
+	for _, src := range config.Sources {
+		if !sourceIDPattern.MatchString(src.ID) {
+			panic(fmt.Sprintf("Invalid source ID: %v. Source IDs may only contain alphanumeric characters and underscores.", src.ID))
+		}
 	}
 
 	return config, nil

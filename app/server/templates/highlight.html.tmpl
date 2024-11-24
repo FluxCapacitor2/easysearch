@@ -1,9 +1,9 @@
-{{ define "highlight" }}
-  {{ range $index, $value := . }}
-    {{ if $value.Highlighted }}
-      <b>{{ $value.Content }}</b>
-    {{ else }}
-      {{ $value.Content }}
-    {{ end }}
-  {{ end }}
-{{ end }}
+{{- define "highlight" -}}
+  {{- range $index, $value := . -}}
+    {{- if $value.Highlighted -}}
+      <b>{{- $value.Content -}}</b>
+    {{- else -}}
+      {{- $value.Content -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}

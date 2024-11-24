@@ -46,6 +46,7 @@ type Database interface {
 	StartEmbeddings(getChunkDetails func(sourceID string) (chunkSize int, chunkOverlap int)) error
 
 	SimilaritySearch(sourceID string, query []float32, limit int) ([]SimilarityResult, error)
+	HybridSearch(sources []string, queryString string, embeddedQueries map[string][]float32, limit int) ([]HybridResult, error)
 }
 
 type Page struct {
@@ -75,6 +76,17 @@ type SimilarityResult struct {
 	Title      string  `json:"title"`
 	Chunk      string  `json:"chunk"`
 	Similarity float32 `json:"similarity"`
+}
+
+type HybridResult struct {
+	URL         string   `json:"url"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Content     []Match  `json:"content"`
+	FTSRank     *int     `json:"ftsRank"`
+	VecRank     *int     `json:"vecRank"`
+	VecDistance *float64 `json:"vecDistance"`
+	HybridRank  float64  `json:"rank"`
 }
 
 type Match struct {

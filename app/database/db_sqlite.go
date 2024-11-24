@@ -1,10 +1,12 @@
 package database
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"regexp"
 	"strings"
+	"text/template"
 
 	_ "embed"
 
@@ -298,6 +300,156 @@ func (db *SQLiteDatabase) SimilaritySearch(sourceID string, query []float32, lim
 		if err != nil {
 			return nil, err
 		}
+		results = append(results, res)
+	}
+
+	return results, err
+}
+
+var tmpl *template.Template = template.Must(template.New("hybrid-search").Parse(`
+WITH {{ range $index, $value := .Sources -}}
+	vec_subquery_{{ $value }} AS (
+		SELECT
+			vec_chunks.page AS page,
+			row_number() OVER (ORDER BY distance) AS rank_number,
+			vec_chunks.chunk AS chunk,
+			distance
+		FROM pages_vec_{{ $value }}
+		JOIN vec_chunks USING (id)
+		WHERE embedding MATCH ? AND k = ?
+		-- Select only the most relevant chunk for each page
+		GROUP BY vec_chunks.page
+		HAVING MIN(distance)
+		ORDER BY distance
+), {{ end }}fts_subquery AS (
+	SELECT
+		pages_fts.rowid AS page,
+		highlight(pages_fts, 1, ?, ?) AS title,
+		snippet(pages_fts, 2, ?, ?, '…', 8) AS description,
+		snippet(pages_fts, 3, ?, ?, '…', 24) AS content,
+		rank
+	FROM pages_fts
+	JOIN pages ON pages.id = pages_fts.rowid
+	WHERE
+		pages.source IN (
+			{{- range $index, $value := .Sources -}}
+				{{- if gt $index 0 }}, {{ end -}}
+				?
+			{{- end -}}
+		)
+		AND pages.status = ?
+		AND pages_fts MATCH ?
+	LIMIT ?
+), fts_ordered AS (
+	SELECT *, row_number() OVER (ORDER BY rank) AS rank_number
+	FROM fts_subquery
+)
+SELECT
+	pages.url,
+	coalesce(fts_ordered.title, pages.title) AS title,
+	coalesce(fts_ordered.description, pages.description) AS description,
+
+	coalesce(
+		fts_ordered.content, {{ range $index, $value := .Sources -}}
+    		{{- if gt $index 0 }}, {{ end -}}
+			vec_subquery_{{ $value }}.chunk
+		{{- end }}
+	) AS content,
+
+   coalesce(
+		{{ range $index, $value := .Sources -}}
+			{{- if gt $index 0 }}, {{ end -}}
+			vec_subquery_{{ $value }}.distance
+		{{- end }}
+	) AS vec_distance,
+
+	coalesce(
+		{{ range $index, $value := .Sources -}}
+			{{- if gt $index 0 }}, {{ end -}}
+			vec_subquery_{{ $value }}.rank_number
+		{{- end }}
+	) AS vec_rank,
+
+  fts_ordered.rank_number AS fts_rank,
+
+	(
+		{{ range $index, $value := .Sources -}}
+			coalesce(1.0 / (60 + vec_subquery_{{ $value }}.rank_number) * 0.5, 0.0) +
+		{{ end -}}
+    coalesce(1.0 / (60 + fts_ordered.rank_number), 0.0)
+	) AS combined_rank
+FROM fts_ordered
+{{ range $index, $value := .Sources -}}
+	FULL OUTER JOIN vec_subquery_{{ $value }} USING (page)
+{{ end -}}
+JOIN pages ON pages.id = coalesce(
+	fts_ordered.page, {{ range $index, $value := .Sources -}}
+	{{- if gt $index 0 }}, {{ end -}}
+		vec_subquery_{{ $value }}.page
+	{{- end }}
+)
+ORDER BY combined_rank DESC;
+`))
+
+func (db *SQLiteDatabase) HybridSearch(sources []string, queryString string, embeddedQueries map[string][]float32, limit int) ([]HybridResult, error) {
+
+	// Convert the query vectors to a blob format that `sqlite-vec` will accept
+	serializedQueries := make(map[string][]byte)
+
+	for sourceID, query := range embeddedQueries {
+		serialized, err := vec.SerializeFloat32(query)
+		if err != nil {
+			return nil, err
+		}
+		serializedQueries[sourceID] = serialized
+	}
+
+	type TemplateData struct {
+		Sources []string
+	}
+
+	var query bytes.Buffer
+	err := tmpl.Execute(&query, TemplateData{Sources: sources})
+	if err != nil {
+		return nil, fmt.Errorf("error formatting query: %v", err)
+	}
+
+	args := []any{}
+
+	// Vector query args
+	for _, src := range sources {
+		args = append(args, serializedQueries[src], limit)
+	}
+
+	// FTS query args
+	start := uuid.New().String()
+	end := uuid.New().String()
+
+	args = append(args, start, end, start, end, start, end)
+
+	for _, src := range sources {
+		args = append(args, src)
+	}
+
+	args = append(args, Finished, queryString, limit)
+
+	rows, err := db.conn.Query(query.String(), args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]HybridResult, 0)
+
+	for rows.Next() {
+		res := HybridResult{}
+		var content string
+		err := rows.Scan(&res.URL, &res.Title, &res.Description, &content, &res.VecDistance, &res.VecRank, &res.FTSRank, &res.HybridRank)
+		if err != nil {
+			return nil, err
+		}
+		res.Content = processResult(content, start, end)
+		// res.Content = []Match{{Content: content, Highlighted: false}}
 		results = append(results, res)
 	}
 

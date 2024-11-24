@@ -1,48 +1,50 @@
-{{ define "results" }}
+{{- define "results" -}}
   <div class="htmx-indicator"></div>
-  {{ if .Results }}
-    {{ range $index, $result := .Results }}
+  {{- if .Results -}}
+    {{- range $index, $result := .Results -}}
       <div class="result">
         <ul class="breadcrumbs">
-          {{ range $index, $item := $result.Breadcrumbs }}
-            {{ if $index }}
-              <!-- The right-angled chevron in between items -->
+          {{- range $index, $item := $result.Breadcrumbs -}}
+            {{- if $index -}}
+              {{- /* The right-angled chevron in between items */ -}}
               <li aria-hidden="true">&raquo;</li>
-            {{ else }}
-              <a href="{{ $item.URL }}">
+            {{- else -}}
+              <a href="{{- $item.URL -}}">
                 <img
-                  src="https://icons.duckduckgo.com/ip3/{{ $item.Text }}.ico"
+                  src="https://icons.duckduckgo.com/ip3/{{- $item.Text -}}.ico"
                   class="favicon"
                 />
               </a>
-            {{ end }}
+            {{- end -}}
             <li>
-              <a href="{{ $item.URL }}">{{ $item.Text }}</a>
+              <a href="{{- $item.URL -}}">{{- $item.Text -}}</a>
             </li>
-          {{ end }}
+          {{- end -}}
         </ul>
-        <a href="{{ $result.URL }}">{{ template "highlight" $result.Title }}</a>
-        <p>{{ template "highlight" $result.Content }}</p>
+        <a href="{{- $result.URL -}}"
+          >{{- template "highlight" $result.Title -}}</a
+        >
+        <p>{{- template "highlight" $result.Content -}}</p>
       </div>
-    {{ end }}
+    {{- end -}}
 
-    {{ range $index, $value := .Pages }}
-      {{ if $value.Current }}
+    {{- range $index, $value := .Pages -}}
+      {{- if $value.Current -}}
         <button disabled>
-          {{ $value.Number }}
+          {{- $value.Number -}}
         </button>
-      {{ else }}
-        <a href="{{ $value.URL }}" class="page-number" hx-boost="true">
+      {{- else -}}
+        <a href="{{- $value.URL -}}" class="page-number" hx-boost="true">
           <button>
-            {{ $value.Number }}
+            {{- $value.Number -}}
           </button>
         </a>
-      {{ end }}
-    {{ end }}
+      {{- end -}}
+    {{- end -}}
 
 
-    <p class="count">{{ .Total }} results found in {{ .Time }}s.</p>
-  {{ else if .Query }}
+    <p class="count">{{- .Total -}} results found in {{- .Time -}}s.</p>
+  {{- else if .Query -}}
     No results found.
-  {{ end }}
-{{ end }}
+  {{- end -}}
+{{- end -}}
