@@ -77,6 +77,13 @@ CREATE TRIGGER IF NOT EXISTS delete_page_canonicals_on_page_delete AFTER DELETE 
   DELETE FROM canonicals WHERE source = old.source AND canonical = old.url;
 END;
 
+-- When a page is inserted, delete non-canonical versions.
+-- For example, if a page gets indexed, and then the site owner changes its canonical, and then the page gets refreshed,
+-- refreshing will cause a canonical and a page with the new URL to be inserted. When this happens, the old entry should be deleted.
+CREATE TRIGGER IF NOT EXISTS delete_page_non_canonicals_on_page_insert BEFORE INSERT ON pages BEGIN
+  DELETE FROM pages WHERE source = new.source AND url IN (SELECT url FROM canonicals WHERE source = new.source AND canonical = new.url);
+END;
+
 -- Use triggers to automatically sync the FTS table with the content table
 -- https://sqlite.org/fts5.html#external_content_tables
 CREATE TRIGGER IF NOT EXISTS pages_auto_insert AFTER INSERT ON pages BEGIN

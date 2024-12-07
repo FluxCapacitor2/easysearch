@@ -6,7 +6,7 @@ type Database interface {
 	SetupVectorTables(sourceID string, dimension int) error
 	DropVectorTables(sourceID string) error
 
-	// Set the status of items that have been Processing for over a minute to Pending and remove any Finished entries
+	// Clears out unused data and marks queue items that have been Processing for a while as Pending
 	Cleanup() error
 
 	// Add a page to the search index.

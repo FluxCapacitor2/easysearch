@@ -617,10 +617,10 @@ func (db *SQLiteDatabase) UpdateEmbedQueueEntry(id int64, status QueueItemStatus
 
 func (db *SQLiteDatabase) Cleanup() error {
 	_, err := db.conn.Exec(`
-		-- 1) Clear all Finished queue items (this is a sanity check; they should be immediately deleted from UpdateQueueEntry)
+		-- Clear all Finished queue items (this is a sanity check; they should be immediately deleted from UpdateQueueEntry)
 		DELETE FROM crawl_queue WHERE status = ?;
 
-		-- 2) Mark items that have been Processing for over a minute as Pending again
+		-- Mark items that have been Processing for over a minute as Pending again
 		UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE status = ? AND unixepoch() - unixepoch(updatedAt) > 60;
 
 		-- Do the same for the embedding queue

@@ -194,8 +194,7 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 		page.ErrorInfo = err.Error()
 	}
 
-	// TODO timeout
-	collector.Wait()
+	collector.Wait() // This waits at most 10 seconds, which is the default request timeout
 
 	result := &CrawlResult{
 		URLs:      maps.Keys(urls),
