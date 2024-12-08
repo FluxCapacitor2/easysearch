@@ -31,7 +31,7 @@ func TestCrawl(t *testing.T) {
 	}
 
 	url := "https://www.example.com"
-	res, err := Crawl(source, 1, url, db, url)
+	res, err := Crawl(source, 1, []int64{}, db, url)
 
 	if err != nil {
 		t.Fatalf("error crawling URL %v: %v\n", url, err)
@@ -55,7 +55,7 @@ func TestCrawlWithRedirect(t *testing.T) {
 
 	url := "https://bswanson.dev"
 	expectedCanonical := "https://www.bswanson.dev/"
-	res, err := Crawl(source, 1, url, db, url)
+	res, err := Crawl(source, 1, []int64{}, db, url)
 
 	if err != nil {
 		t.Fatalf("error crawling URL %v: %v\n", url, err)
@@ -74,7 +74,7 @@ func TestCrawlWithForbiddenDomain(t *testing.T) {
 	}
 
 	url := "https://bswanson.dev/portfolio"
-	_, err := Crawl(source, 1, url, db, url)
+	_, err := Crawl(source, 1, []int64{}, db, url)
 
 	if err == nil {
 		t.Fatalf("expected error due to forbidden domain; none was received")
@@ -89,7 +89,7 @@ func TestCrawlWithServerError(t *testing.T) {
 	}
 
 	url := "https://httpstat.us/500"
-	_, err := Crawl(source, 1, url, db, url)
+	_, err := Crawl(source, 1, []int64{}, db, url)
 
 	if err == nil {
 		t.Fatalf("expected error due to 500 status; none was received")
@@ -108,7 +108,7 @@ func TestCrawlWithPageNotFound(t *testing.T) {
 	}
 
 	url := "https://httpstat.us/404"
-	_, err := Crawl(source, 1, url, db, url)
+	_, err := Crawl(source, 1, []int64{}, db, url)
 
 	if err.Error() != "Not Found" {
 		t.Fatalf("expected error due to 404 status; got %v\n", err)
@@ -123,7 +123,7 @@ func TestSitemap(t *testing.T) {
 	}
 
 	url := "https://www.google.com/sitemap.xml"
-	res, err := Crawl(source, 1, url, db, url)
+	res, err := Crawl(source, 1, []int64{}, db, url)
 
 	if err != nil {
 		t.Errorf("error crawling Google sitemap: %v\n", err)

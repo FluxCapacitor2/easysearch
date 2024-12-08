@@ -13,15 +13,27 @@ CREATE TABLE IF NOT EXISTS crawl_queue(
     url TEXT NOT NULL,
     status INTEGER DEFAULT 0, -- Pending
     depth INTEGER,
-    referrer TEXT,
     addedAt TEXT DEFAULT CURRENT_TIMESTAMP,
     updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
     isRefresh INTEGER DEFAULT 0
 ) STRICT;
 
+-- This table temporarily stores referrers before the referenced page is crawled. Then, the relationship is stored in `pages_referrers`.
+CREATE TABLE IF NOT EXISTS crawl_queue_referrers(
+  queueItem INTEGER NOT NULL,
+  referrer INTEGER NOT NULL,
+  FOREIGN KEY(queueItem) REFERENCES crawl_queue(id) ON DELETE CASCADE,
+  FOREIGN KEY(referrer) REFERENCES pages(id) ON DELETE CASCADE
+) STRICT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS crawl_queue_referrers_src_dest_unique ON crawl_queue_referrers(queueItem, referrer);
+
 -- When a canonical page is removed from the queue, also remove all pages that link to it
 CREATE TRIGGER IF NOT EXISTS queue_delete_followers_on_canonical_delete AFTER DELETE ON crawl_queue BEGIN
   DELETE FROM crawl_queue WHERE source = old.source AND url IN (SELECT url FROM canonicals WHERE canonical = old.url);
+
+  -- This should be enforced by the foreign key, but in some cases, the child rows don't get deleted automatically for some reason, even when PRAGMA foreign_keys = ON.
+  DELETE FROM crawl_queue_referrers WHERE queueItem = old.id;
 END;
 
 -- When a canonical URL is discovered, it is cached in this table to prevent excessively querying the target
@@ -40,7 +52,6 @@ CREATE TABLE IF NOT EXISTS pages(
 
     crawledAt TEXT DEFAULT CURRENT_TIMESTAMP,
     depth INTEGER NOT NULL,
-    referrer TEXT,
     errorInfo TEXT,
     status INTEGER NOT NULL,
 
@@ -49,6 +60,15 @@ CREATE TABLE IF NOT EXISTS pages(
     description TEXT,
     content TEXT
 ) STRICT;
+
+CREATE TABLE IF NOT EXISTS pages_referrers(
+  source INTEGER NOT NULL,
+  dest INTEGER NOT NULL,
+  FOREIGN KEY(source) REFERENCES pages(id) ON DELETE CASCADE,
+  FOREIGN KEY(dest) REFERENCES pages(id) ON DELETE CASCADE
+) STRICT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS pages_referrers_src_dest_unique ON pages_referrers(source, dest);
 
 CREATE TRIGGER IF NOT EXISTS pages_disallow_update_id AFTER UPDATE ON pages
 WHEN old.id != new.id BEGIN

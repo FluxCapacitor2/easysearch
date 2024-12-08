@@ -10,7 +10,7 @@ type Database interface {
 	Cleanup() error
 
 	// Add a page to the search index.
-	AddDocument(source string, depth int32, referrer string, url string, status QueueItemStatus, title string, description string, content string, errorInfo string) (int64, error)
+	AddDocument(source string, depth int32, referrers []int64, url string, status QueueItemStatus, title string, description string, content string, errorInfo string) (int64, error)
 	// Returns whether the given URL (or the URL's canonical) is indexed
 	HasDocument(source string, url string) (*bool, error)
 	// Fetch the document by URL (or the URL's canonical)
@@ -18,6 +18,17 @@ type Database interface {
 	GetDocumentByID(id int64) (*Page, error)
 	// Delete a document by its URL and remove all canonicals pointing to it
 	RemoveDocument(source string, url string) error
+
+	// Records all the pages that a page links to for future reference.
+	AddReferrer(source int64, dest int64) error
+	// Removes an existing referrer entry, given a source and destination page.
+	RemoveReferrer(source int64, dest int64) error
+	// Get a list of all the page IDs that this page links to.
+	GetReferences(pageID int64) ([]int64, error)
+	// Get a list of all the page IDs that link to this page.
+	GetReferrers(pageID int64) ([]int64, error)
+	// Lists pages with no referrers. These pages should usually be deleted, unless they're the source's base URL.
+	ListOrphanPages() ([]int64, error)
 
 	// Run a fulltext search with the given query
 	Search(sources []string, query string, page uint32, pageSize uint32) ([]FTSResult, *uint32, error)
@@ -52,7 +63,6 @@ type Database interface {
 type Page struct {
 	ID          int64           `json:"id"`
 	Source      string          `json:"source"`
-	Referrer    string          `json:"referrer"`
 	URL         string          `json:"url"`
 	Title       string          `json:"title"`
 	Description string          `json:"description"`
@@ -115,7 +125,7 @@ type QueueItem struct {
 	UpdatedAt string
 	Depth     int32
 	IsRefresh bool
-	Referrer  string
+	Referrers []int64
 	Status    QueueItemStatus
 }
 

@@ -122,7 +122,7 @@ func processCrawlQueue(db database.Database, config *config.Config, src config.S
 	}
 
 	// The `item` is nil when there are no items in the queue
-	result, err := crawler.Crawl(src, item.Depth, item.Referrer, db, item.URL)
+	result, err := crawler.Crawl(src, item.Depth, item.Referrers, db, item.URL)
 
 	if err != nil {
 		// Mark the queue entry as errored
@@ -137,7 +137,7 @@ func processCrawlQueue(db database.Database, config *config.Config, src config.S
 		// Add an entry to the pages table to prevent immediately recrawling the same URL when referred from other sources.
 		// Additionally, if refresh is enabled, another crawl attempt will be made after the refresh interval passes.
 		if result != nil {
-			_, err := db.AddDocument(src.ID, item.Depth, item.Referrer, result.Canonical, database.Error, "", "", "", err.Error())
+			_, err := db.AddDocument(src.ID, item.Depth, item.Referrers, result.Canonical, database.Error, "", "", "", err.Error())
 			if err != nil {
 				fmt.Printf("Failed to add page in 'error' state: %v\n", err)
 			}
@@ -174,22 +174,32 @@ func processCrawlQueue(db database.Database, config *config.Config, src config.S
 		}
 	}
 
+	// Record existing pages that this page refers to
+	filtered := filterURLs(db, src, result.URLs, false)
+	for _, url := range filtered {
+		doc, err := db.GetDocument(src.ID, url)
+		if err != nil || doc == nil {
+			continue
+		}
+		err = db.AddReferrer(result.PageID, doc.ID)
+		if err != nil {
+			fmt.Printf("Error recording referrer: %v\n", err)
+		}
+	}
+
 	if item.Depth+1 >= src.MaxDepth {
 		return // No need to add any new URLs
 	}
 
 	// Add URLs found in the crawl to the queue
-	filtered := filterURLs(db, src, result.URLs)
-
-	if item.Depth+1 <= src.MaxDepth {
-		err := db.AddToQueue(src.ID, result.Canonical, filtered, item.Depth+1, false)
-		if err != nil {
-			fmt.Printf("Error adding URLs to queue: %v\n", err)
-		}
+	filtered = filterURLs(db, src, result.URLs, true)
+	err = db.AddToQueue(src.ID, result.Canonical, filtered, item.Depth+1, false)
+	if err != nil {
+		fmt.Printf("Error adding URLs to queue: %v\n", err)
 	}
 }
 
-func filterURLs(db database.Database, src config.Source, urls []string) []string {
+func filterURLs(db database.Database, src config.Source, urls []string, newOnly bool) []string {
 	filtered := []string{}
 
 	for _, fullURL := range urls {
@@ -198,10 +208,12 @@ func filterURLs(db database.Database, src config.Source, urls []string) []string
 			fmt.Printf("%v\n", err)
 		} else {
 
-			crawled, err := db.HasDocument(src.ID, fullURL)
+			if newOnly {
+				crawled, err := db.HasDocument(src.ID, fullURL)
 
-			if err == nil && *crawled {
-				continue
+				if err == nil && *crawled {
+					continue
+				}
 			}
 
 			if slices.Contains(src.AllowedDomains, res.Hostname()) {

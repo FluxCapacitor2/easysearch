@@ -48,10 +48,107 @@ func (db *SQLiteDatabase) DropVectorTables(sourceID string) error {
 	return err
 }
 
-func (db *SQLiteDatabase) AddDocument(source string, depth int32, referrer string, url string, status QueueItemStatus, title string, description string, content string, errorInfo string) (int64, error) {
+func (db *SQLiteDatabase) AddDocument(source string, depth int32, referrers []int64, url string, status QueueItemStatus, title string, description string, content string, errorInfo string) (int64, error) {
 	id := int64(-1)
-	err := db.conn.QueryRow("REPLACE INTO pages (source, depth, referrer, status, url, title, description, content, errorInfo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING (id);", source, depth, referrer, status, url, title, description, content, errorInfo).Scan(&id)
+	tx, err := db.conn.Begin()
+	if err != nil {
+		if err := tx.Rollback(); err != nil {
+			return id, err
+		}
+		return id, err
+	}
+	err = tx.QueryRow("REPLACE INTO pages (source, depth, status, url, title, description, content, errorInfo) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING (id);", source, depth, status, url, title, description, content, errorInfo).Scan(&id)
+	if err != nil {
+		if err := tx.Rollback(); err != nil {
+			return id, err
+		}
+		return id, err
+	}
+
+	for _, ref := range referrers {
+		_, err = tx.Exec("INSERT INTO pages_referrers (source, dest) VALUES (?, ?);", ref, id)
+		if err != nil {
+			if err := tx.Rollback(); err != nil {
+				return id, err
+			}
+			return id, err
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		if err := tx.Rollback(); err != nil {
+			return id, err
+		}
+		return id, err
+	}
+
 	return id, err
+}
+
+func (db *SQLiteDatabase) AddReferrer(source int64, dest int64) error {
+	_, err := db.conn.Exec("INSERT INTO pages_referrers (source, dest) VALUES (?, ?) ON CONFLICT DO NOTHING;", source, dest)
+	return err
+}
+
+func (db *SQLiteDatabase) RemoveReferrer(source int64, dest int64) error {
+	_, err := db.conn.Exec("DELETE FROM pages_referrers WHERE source = ? AND dest = ?;", source, dest)
+	return err
+}
+
+func (db *SQLiteDatabase) GetReferences(pageID int64) ([]int64, error) {
+	rows, err := db.conn.Query("SELECT dest FROM pages_referrers WHERE source = ?;", pageID)
+	if err != nil {
+		return nil, err
+	}
+
+	var references []int64
+	for rows.Next() {
+		var r int64
+		err := rows.Scan(&r)
+		if err != nil {
+			return nil, err
+		}
+		references = append(references, r)
+	}
+	return references, nil
+}
+
+func (db *SQLiteDatabase) GetReferrers(pageID int64) ([]int64, error) {
+	rows, err := db.conn.Query("SELECT source FROM pages_referrers WHERE dest = ?;", pageID)
+	if err != nil {
+		return nil, err
+	}
+
+	var referrers []int64
+	for rows.Next() {
+		var r int64
+		err := rows.Scan(&r)
+		if err != nil {
+			return nil, err
+		}
+		referrers = append(referrers, r)
+	}
+	return referrers, nil
+}
+
+func (db *SQLiteDatabase) ListOrphanPages() ([]int64, error) {
+	rows, err := db.conn.Query("SELECT id FROM pages WHERE id NOT IN (SELECT dest FROM pages_referrers);")
+	if err != nil {
+		return nil, err
+	}
+
+	var pageIDs []int64
+	for rows.Next() {
+		var r int64
+		err := rows.Scan(&r)
+		if err != nil {
+			return nil, err
+		}
+		pageIDs = append(pageIDs, r)
+	}
+
+	return pageIDs, nil
 }
 
 func (db *SQLiteDatabase) RemoveDocument(source string, url string) error {
@@ -77,10 +174,10 @@ func (db *SQLiteDatabase) HasDocument(source string, url string) (*bool, error) 
 }
 
 func (db *SQLiteDatabase) GetDocument(source string, url string) (*Page, error) {
-	cursor := db.conn.QueryRow("SELECT id, source, referrer, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
+	cursor := db.conn.QueryRow("SELECT id, source, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
 
 	page := Page{}
-	err := cursor.Scan(&page.ID, &page.Source, &page.Referrer, &page.URL, &page.Title, &page.Description, &page.Content, &page.Depth, &page.CrawledAt, &page.Status, &page.ErrorInfo)
+	err := cursor.Scan(&page.ID, &page.Source, &page.URL, &page.Title, &page.Description, &page.Content, &page.Depth, &page.CrawledAt, &page.Status, &page.ErrorInfo)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -94,10 +191,10 @@ func (db *SQLiteDatabase) GetDocument(source string, url string) (*Page, error) 
 }
 
 func (db *SQLiteDatabase) GetDocumentByID(id int64) (*Page, error) {
-	cursor := db.conn.QueryRow("SELECT id, source, referrer, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE id = ?;", id)
+	cursor := db.conn.QueryRow("SELECT id, source, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE id = ?;", id)
 
 	page := Page{}
-	err := cursor.Scan(&page.ID, &page.Source, &page.Referrer, &page.URL, &page.Title, &page.Description, &page.Content, &page.Depth, &page.CrawledAt, &page.Status, &page.ErrorInfo)
+	err := cursor.Scan(&page.ID, &page.Source, &page.URL, &page.Title, &page.Description, &page.Content, &page.Depth, &page.CrawledAt, &page.Status, &page.ErrorInfo)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -459,6 +556,11 @@ func (db *SQLiteDatabase) HybridSearch(sources []string, queryString string, emb
 
 func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []string, depth int32, isRefresh bool) error {
 
+	page, err := db.GetDocument(source, referrer)
+	if err != nil {
+		return fmt.Errorf("error looking up referring page: %v", err)
+	}
+
 	tx, err := db.conn.Begin()
 
 	if err != nil {
@@ -466,10 +568,24 @@ func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []stri
 	}
 
 	for _, url := range urls {
-		_, err := tx.Exec("INSERT INTO crawl_queue (source, referrer, url, depth, isRefresh) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING;", source, referrer, url, depth, isRefresh)
+		// Insert a crawl queue entry (or use an existing one) and get its ID
+		// The seemingly-useless ON CONFLICT clause makes sure the ID is returned, even if the row already exists
+		var id int64
+		err := tx.QueryRow("INSERT INTO crawl_queue (source, url, depth, isRefresh) VALUES (?, ?, ?, ?) ON CONFLICT DO UPDATE SET url = url RETURNING id;", source, url, depth, isRefresh).Scan(&id)
 		if err != nil {
-			rbErr := tx.Rollback()
-			if rbErr != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				return rbErr
+			}
+			return err
+		}
+
+		// If there was a referring page, record it
+		if page == nil {
+			continue
+		}
+		_, err = tx.Exec("INSERT INTO crawl_queue_referrers (queueItem, referrer) VALUES (?, ?) ON CONFLICT DO NOTHING;", id, page.ID)
+		if err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
 				return rbErr
 			}
 			return err
@@ -520,11 +636,11 @@ func (db *SQLiteDatabase) PopQueue(source string) (*QueueItem, error) {
 	row := db.conn.QueryRow(`
 	  UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE rowid = (
 	    SELECT rowid FROM crawl_queue WHERE status = ? AND source = ? ORDER BY addedAt LIMIT 1
-	  ) RETURNING source, referrer, url, status, depth, isRefresh, addedAt, updatedAt;
+	  ) RETURNING id, source, url, status, depth, isRefresh, addedAt, updatedAt;
 	`, Processing, Pending, source)
 
 	item := &QueueItem{}
-	err := row.Scan(&item.Source, &item.Referrer, &item.URL, &item.Status, &item.Depth, &item.IsRefresh, &item.AddedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.Source, &item.URL, &item.Status, &item.Depth, &item.IsRefresh, &item.AddedAt, &item.UpdatedAt)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -532,6 +648,24 @@ func (db *SQLiteDatabase) PopQueue(source string) (*QueueItem, error) {
 		}
 		return nil, err
 	}
+
+	var referrers []int64
+	rows, err := db.conn.Query("SELECT referrer FROM crawl_queue_referrers WHERE queueItem = ?;", item.ID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var r int64
+		err := rows.Scan(&r)
+		if err != nil {
+			return nil, err
+		}
+		referrers = append(referrers, r)
+	}
+
+	item.Referrers = referrers
 
 	return item, nil
 }
@@ -674,7 +808,7 @@ func (db *SQLiteDatabase) StartEmbeddings(getChunkDetails func(sourceID string) 
 }
 
 func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) error {
-	rows, err := db.conn.Query("SELECT source, referrer, url, crawledAt, depth, status FROM pages WHERE url NOT IN (SELECT url FROM crawl_queue) AND source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
+	rows, err := db.conn.Query("SELECT source, url, crawledAt, depth, status FROM pages WHERE url NOT IN (SELECT url FROM crawl_queue) AND source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
 
 	if err != nil {
 		return err
@@ -684,13 +818,14 @@ func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) erro
 
 		row := &Page{}
 
-		err := rows.Scan(&row.Source, &row.Referrer, &row.URL, &row.CrawledAt, &row.Depth, &row.Status)
+		err := rows.Scan(&row.Source, &row.URL, &row.CrawledAt, &row.Depth, &row.Status)
 
 		if err != nil {
 			return err
 		}
 
-		err = db.AddToQueue(source, row.Referrer, []string{row.URL}, row.Depth, true)
+		// The referrer is blank because the `pages` table entry already has all of its referrers recorded
+		err = db.AddToQueue(source, "", []string{row.URL}, row.Depth, true)
 
 		if err != nil {
 			return err

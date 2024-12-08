@@ -168,7 +168,7 @@ func TestProcessResultEmptyEnd(t *testing.T) {
 func TestHasDocument(t *testing.T) {
 	db := createDB(t)
 
-	db.AddDocument("source1", 1, "", "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.", "")
+	db.AddDocument("source1", 1, []int64{}, "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.", "")
 
 	res, err := db.HasDocument("source1", "https://example.com/")
 	if err != nil {
@@ -185,7 +185,6 @@ func TestGetDocument(t *testing.T) {
 	page := Page{
 		ID:          1,
 		Source:      "source1",
-		Referrer:    "",
 		URL:         "https://example.com/",
 		Title:       "Example Domain",
 		Description: "",
@@ -195,7 +194,7 @@ func TestGetDocument(t *testing.T) {
 		ErrorInfo:   "",
 	}
 
-	db.AddDocument(page.Source, page.Depth, page.Referrer, page.URL, page.Status, page.Title, page.Description, page.Content, page.ErrorInfo)
+	db.AddDocument(page.Source, page.Depth, []int64{}, page.URL, page.Status, page.Title, page.Description, page.Content, page.ErrorInfo)
 
 	doc, err := db.GetDocument("source1", "https://example.com/")
 	if err != nil {
@@ -214,7 +213,7 @@ func TestGetDocument(t *testing.T) {
 func TestDeleteCanonicalsOnDeletePage(t *testing.T) {
 	db := createDB(t)
 
-	_, err := db.AddDocument("source1", 0, "", "https://example.com/", Finished, "Title", "Description", "Content", "")
+	_, err := db.AddDocument("source1", 0, []int64{}, "https://example.com/", Finished, "Title", "Description", "Content", "")
 	if err != nil {
 		t.Fatalf("failed to add page: %v", err)
 	}
@@ -240,7 +239,7 @@ func TestDeleteCanonicalsOnDeletePage(t *testing.T) {
 func TestSearchQuery(t *testing.T) {
 	db := createDB(t)
 
-	_, err := db.AddDocument("source1", 1, "", "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.", "")
+	_, err := db.AddDocument("source1", 1, []int64{}, "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.", "")
 	if err != nil {
 		t.Fatalf("error adding document: %v", err)
 	}
@@ -277,7 +276,7 @@ func TestSearchQuery(t *testing.T) {
 func TestQueuePagesOlderThan(t *testing.T) {
 	db := createDB(t)
 
-	_, err := db.AddDocument("source", 1, "", "", Finished, "", "", "", "")
+	_, err := db.AddDocument("source", 1, []int64{}, "", Finished, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error adding document: %v", err)
 	}

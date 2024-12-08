@@ -38,7 +38,7 @@ type ExtractedPageContent struct {
 	ErrorInfo   string
 }
 
-func Crawl(source config.Source, currentDepth int32, referrer string, db database.Database, pageURL string) (*CrawlResult, error) {
+func Crawl(source config.Source, currentDepth int32, referrers []int64, db database.Database, pageURL string) (*CrawlResult, error) {
 
 	// Parse the URL, canonicalize it, and convert it back into a string for later use
 	orig, err := url.Parse(pageURL)
@@ -211,7 +211,7 @@ func Crawl(source config.Source, currentDepth int32, referrer string, db databas
 
 	if !cancelled {
 		text := Truncate(source.SizeLimit, page.Title, page.Description, page.Content)
-		id, addDocErr := db.AddDocument(source.ID, currentDepth, referrer, page.Canonical, page.Status, text[0], text[1], text[2], page.ErrorInfo)
+		id, addDocErr := db.AddDocument(source.ID, currentDepth, referrers, page.Canonical, page.Status, text[0], text[1], text[2], page.ErrorInfo)
 		result.PageID = id
 		if addDocErr != nil {
 			err = addDocErr
