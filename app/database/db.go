@@ -23,6 +23,8 @@ type Database interface {
 	AddReferrer(source int64, dest int64) error
 	// Removes an existing referrer entry, given a source and destination page.
 	RemoveReferrer(source int64, dest int64) error
+	// Removes all referrer entries for the pages that this page refers to. Used when refreshing pages to remove old entries before calling AddReferrer with new entries.
+	RemoveAllReferences(source int64) error
 	// Get a list of all the page IDs that this page links to.
 	GetReferences(pageID int64) ([]int64, error)
 	// Get a list of all the page IDs that link to this page.

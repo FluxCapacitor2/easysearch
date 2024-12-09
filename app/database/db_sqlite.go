@@ -96,6 +96,11 @@ func (db *SQLiteDatabase) RemoveReferrer(source int64, dest int64) error {
 	return err
 }
 
+func (db *SQLiteDatabase) RemoveAllReferences(source int64) error {
+	_, err := db.conn.Exec("DELETE FROM pages_referrers WHERE source = ?;", source)
+	return err
+}
+
 func (db *SQLiteDatabase) GetReferences(pageID int64) ([]int64, error) {
 	rows, err := db.conn.Query("SELECT dest FROM pages_referrers WHERE source = ?;", pageID)
 	if err != nil {

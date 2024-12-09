@@ -174,6 +174,12 @@ func processCrawlQueue(db database.Database, config *config.Config, src config.S
 		}
 	}
 
+	// Remove existing references and then populate new ones
+	err = db.RemoveAllReferences(result.PageID)
+	if err != nil {
+		fmt.Printf("Error removing references: %v\n", err)
+	}
+
 	// Record existing pages that this page refers to
 	filtered := filterURLs(db, src, result.URLs, false)
 	for _, url := range filtered {
