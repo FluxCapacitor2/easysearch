@@ -41,9 +41,9 @@ func (db *SQLiteDatabase) SetupVectorTables(sourceID string, dimensions int) err
 
 func (db *SQLiteDatabase) DropVectorTables(sourceID string) error {
 	_, err := db.conn.Exec(fmt.Sprintf(`
-	DROP TABLE pages_vec_%s;
-	DROP TRIGGER pages_refresh_vector_embeddings_%s;
-	DROP TRIGGER delete_embedding_on_delete_chunk_%s;
+	DROP TABLE IF EXISTS pages_vec_%s;
+	DROP TRIGGER IF EXISTS pages_refresh_vector_embeddings_%s;
+	DROP TRIGGER IF EXISTS delete_embedding_on_delete_chunk_%s;
 	`, sourceID, sourceID, sourceID))
 	return err
 }
