@@ -168,7 +168,7 @@ func Start(db database.Database, cfg *config.Config) {
 
 		for _, s := range foundSources {
 			if s.Embeddings.Enabled && queryEmbeds[s.Embeddings.Model] == nil {
-				vector, err := embedding.GetEmbeddings(s.Embeddings.OpenAIBaseURL, s.Embeddings.Model, s.Embeddings.APIKey, q)
+				vector, err := embedding.GetEmbeddings(s.Embeddings.OpenAIBaseURL, s.Embeddings.Model, s.Embeddings.APIKey, []string{q})
 				if err != nil {
 					fmt.Printf("Error getting embeddings for search query: %v\n", err)
 					respond(httpResponse{
@@ -178,8 +178,7 @@ func Start(db database.Database, cfg *config.Config) {
 					})
 					return
 				}
-				queryEmbeds[s.Embeddings.Model] = vector
-
+				queryEmbeds[s.Embeddings.Model] = vector[0]
 			}
 		}
 
@@ -260,7 +259,7 @@ func Start(db database.Database, cfg *config.Config) {
 
 		for _, s := range foundSources {
 			if s.Embeddings.Enabled && queryEmbeds[s.Embeddings.Model] == nil {
-				vector, err := embedding.GetEmbeddings(s.Embeddings.OpenAIBaseURL, s.Embeddings.Model, s.Embeddings.APIKey, q)
+				vector, err := embedding.GetEmbeddings(s.Embeddings.OpenAIBaseURL, s.Embeddings.Model, s.Embeddings.APIKey, []string{q})
 				if err != nil {
 					fmt.Printf("Error getting embeddings for search query: %v\n", err)
 					respond(httpResponse{
@@ -270,8 +269,7 @@ func Start(db database.Database, cfg *config.Config) {
 					})
 					return
 				}
-				queryEmbeds[s.Embeddings.Model] = vector
-
+				queryEmbeds[s.Embeddings.Model] = vector[0]
 			}
 		}
 

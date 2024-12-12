@@ -675,16 +675,13 @@ func (db *SQLiteDatabase) PopQueue(source string) (*QueueItem, error) {
 	return item, nil
 }
 
-func (db *SQLiteDatabase) PopEmbedQueue(source string) (*EmbedQueueItem, error) {
+func (db *SQLiteDatabase) PopEmbedQueue(limit int, source string) ([]EmbedQueueItem, error) {
 	// Find the first item in the queue and update it in one step. If the row isn't returned, another process must have updated it at the same time.
-	row := db.conn.QueryRow(`
-	  UPDATE embed_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = (
-	    SELECT embed_queue.id FROM embed_queue JOIN pages ON embed_queue.page = pages.id WHERE embed_queue.status = ? AND pages.source = ? ORDER BY embed_queue.addedAt LIMIT 1
+	rows, err := db.conn.Query(`
+	  UPDATE embed_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id IN (
+	    SELECT embed_queue.id FROM embed_queue JOIN pages ON embed_queue.page = pages.id WHERE embed_queue.status = ? AND pages.source = ? ORDER BY embed_queue.addedAt LIMIT ?
 	  ) RETURNING id, status, page, chunkIndex, chunk;
-	`, Processing, Pending, source)
-
-	item := &EmbedQueueItem{}
-	err := row.Scan(&item.ID, &item.Status, &item.PageID, &item.ChunkIndex, &item.Content)
+	`, Processing, Pending, source, limit)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -693,7 +690,24 @@ func (db *SQLiteDatabase) PopEmbedQueue(source string) (*EmbedQueueItem, error) 
 		return nil, err
 	}
 
-	return item, nil
+	chunks := make([]EmbedQueueItem, 0, limit)
+
+	for rows.Next() {
+
+		item := EmbedQueueItem{}
+		err := rows.Scan(&item.ID, &item.Status, &item.PageID, &item.ChunkIndex, &item.Content)
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return nil, nil
+			}
+			return nil, err
+		}
+
+		chunks = append(chunks, item)
+	}
+
+	return chunks, nil
 }
 
 func (db *SQLiteDatabase) AddEmbedding(pageID int64, sourceID string, chunkIndex int, chunk string, vector []float32) error {

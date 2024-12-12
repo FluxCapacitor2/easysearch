@@ -9,7 +9,7 @@ import (
 	"github.com/tmc/langchaingo/llms/openai"
 )
 
-func GetEmbeddings(openAIBaseURL string, model string, apiKey string, chunk string) ([]float32, error) {
+func GetEmbeddings(openAIBaseURL string, model string, apiKey string, chunks []string) ([][]float32, error) {
 	if apiKey == "" {
 		// `langchaingo` emits an error when the OpenAI API key is empty, even if the API URL has been changed to one that doesn't require authentication.
 		apiKey = "-"
@@ -26,12 +26,12 @@ func GetEmbeddings(openAIBaseURL string, model string, apiKey string, chunk stri
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	vector, err := embedder.EmbedQuery(ctx, chunk)
+	vectors, err := embedder.EmbedDocuments(ctx, chunks)
 	cancel()
 
 	if err != nil {
 		return nil, fmt.Errorf("error generating vectors: %v", err)
 	}
 
-	return vector, nil
+	return vectors, nil
 }

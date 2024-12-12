@@ -55,6 +55,7 @@ type Source struct {
 		Enabled bool
 		// The maximum number of requests per minute to the embeddings API
 		Speed         int
+		BatchSize     int    `yaml:"batchSize"`
 		OpenAIBaseURL string `yaml:"openaiBaseUrl"`
 		APIKey        string `yaml:"apiKey"`
 		Model         string

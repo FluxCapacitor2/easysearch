@@ -26,7 +26,7 @@ func startQueueJob(db database.Database, config *config.Config) {
 		interval := 60.0 / float64(src.Speed)
 
 		if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(interval*float64(time.Second))), gocron.NewTask(func() {
-			processCrawlQueue(db, config, src)
+			processCrawlQueue(db, src)
 		})); err != nil {
 			fmt.Printf("Error creating crawl job: %v", err)
 		}
@@ -39,7 +39,7 @@ func startQueueJob(db database.Database, config *config.Config) {
 		interval := 60.0 / float64(src.Embeddings.Speed)
 
 		if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(interval*float64(time.Second))), gocron.NewTask(func() {
-			processEmbedQueue(db, config, src)
+			processEmbedQueue(db, src)
 		})); err != nil {
 			fmt.Printf("Error creating embedding job: %v", err)
 		}
@@ -73,44 +73,54 @@ func startQueueJob(db database.Database, config *config.Config) {
 	scheduler.Start()
 }
 
-func processEmbedQueue(db database.Database, config *config.Config, src config.Source) {
-	item, err := db.PopEmbedQueue(src.ID)
+func processEmbedQueue(db database.Database, src config.Source) {
+	items, err := db.PopEmbedQueue(src.Embeddings.BatchSize, src.ID)
 	if err != nil {
 		fmt.Printf("Failed to get next item in embed queue: %v\n", err)
 	}
-	if item == nil {
+	if len(items) == 0 {
 		// The queue is empty
 		return
 	}
 
-	markFailure := func() {
-		err := db.UpdateEmbedQueueEntry(item.ID, database.Error)
+	markFailure := func(id int64) {
+		err := db.UpdateEmbedQueueEntry(id, database.Error)
 		if err != nil {
 			fmt.Printf("failed to mark embedding queue item as Error: %v\n", err)
 		}
 	}
 
-	vector, err := embedding.GetEmbeddings(src.Embeddings.OpenAIBaseURL, src.Embeddings.Model, src.Embeddings.APIKey, item.Content)
+	content := make([]string, 0, len(items))
+
+	for _, item := range items {
+		content = append(content, item.Content)
+	}
+
+	vectors, err := embedding.GetEmbeddings(src.Embeddings.OpenAIBaseURL, src.Embeddings.Model, src.Embeddings.APIKey, content)
 	if err != nil {
 		fmt.Printf("error getting embeddings: %v\n", err)
-		markFailure()
+		for _, item := range items {
+			markFailure(item.ID)
+		}
 		return
 	}
 
-	err = db.AddEmbedding(item.PageID, src.ID, item.ChunkIndex, item.Content, vector)
-	if err != nil {
-		fmt.Printf("error saving embedding: %v\n", err)
-		markFailure()
-		return
-	}
+	for i, item := range items {
+		err = db.AddEmbedding(item.PageID, src.ID, item.ChunkIndex, item.Content, vectors[i])
+		if err != nil {
+			fmt.Printf("error saving embedding: %v\n", err)
+			markFailure(item.ID)
+			return
+		}
 
-	err = db.UpdateEmbedQueueEntry(item.ID, database.Finished)
-	if err != nil {
-		fmt.Printf("failed to mark embedding queue item as Finished: %v\n", err)
+		err = db.UpdateEmbedQueueEntry(item.ID, database.Finished)
+		if err != nil {
+			fmt.Printf("failed to mark embedding queue item as Finished: %v\n", err)
+		}
 	}
 }
 
-func processCrawlQueue(db database.Database, config *config.Config, src config.Source) {
+func processCrawlQueue(db database.Database, src config.Source) {
 	// Pop the oldest item off the queue and crawl it.
 	item, err := db.PopQueue(src.ID)
 	if err != nil {

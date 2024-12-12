@@ -46,6 +46,8 @@ sources:
       # The maximum number of requests per minute to the embeddings API.
       # This number is used to start a scheduled task, so don't set this number too high to conserve CPU cycles.
       speed: 30
+      # The maximum amount of chunks to include in a single embeddings API request.
+      batchSize: 64
 
       # Use OpenAI's embedding model:
       # openaiBaseUrl: https://api.openai.com/v1/

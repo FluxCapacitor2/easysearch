@@ -51,7 +51,7 @@ type Database interface {
 
 	// Add text chunks to the embedding queue
 	AddToEmbedQueue(id int64, chunks []string) error
-	PopEmbedQueue(source string) (*EmbedQueueItem, error)
+	PopEmbedQueue(limit int, source string) ([]EmbedQueueItem, error)
 	UpdateEmbedQueueEntry(id int64, status QueueItemStatus) error
 	AddEmbedding(pageID int64, sourceID string, chunkIndex int, chunk string, vector []float32) error
 
