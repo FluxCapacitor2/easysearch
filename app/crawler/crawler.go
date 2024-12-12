@@ -191,6 +191,7 @@ func Crawl(source config.Source, currentDepth int32, referrers []int64, db datab
 	err = collector.Visit(page.Canonical)
 
 	if err != nil {
+		page.Status = database.Error
 		page.ErrorInfo = err.Error()
 	}
 
