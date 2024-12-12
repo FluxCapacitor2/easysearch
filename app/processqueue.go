@@ -40,9 +40,11 @@ func startQueueJob(db database.Database, config *config.Config) {
 
 		if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(interval*float64(time.Second))), gocron.NewTask(func() {
 
-			err = db.StartEmbeddings(src.ID, src.Embeddings.ChunkSize, src.Embeddings.ChunkOverlap)
-			if err != nil {
-				fmt.Printf("Error queueing pages that need embeddings: %v\n", err)
+			if src.Embeddings.Enabled {
+				err = db.StartEmbeddings(src.ID, src.Embeddings.ChunkSize, src.Embeddings.ChunkOverlap)
+				if err != nil {
+					fmt.Printf("Error queueing pages that need embeddings: %v\n", err)
+				}
 			}
 
 			processEmbedQueue(db, src)
