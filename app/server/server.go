@@ -286,6 +286,15 @@ func Start(db database.Database, cfg *config.Config) {
 			sourceList = append(sourceList, s.ID)
 		}
 
+		if len(sourceList) == 0 {
+			respond(httpResponse{
+				status:  400,
+				Success: false,
+				Error:   "No valid sources found",
+			})
+			return
+		}
+
 		results, err := db.HybridSearch(sourceList, q, embeddedQueries, 10)
 		if err != nil {
 			fmt.Printf("Error generating search results: %v\n", err)

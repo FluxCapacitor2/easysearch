@@ -450,44 +450,47 @@ SELECT
 	pages.url,
 	coalesce(fts_ordered.title, pages.title) AS title,
 	coalesce(fts_ordered.description, pages.description) AS description,
-
-	coalesce(
-		fts_ordered.content, {{ range $index, $value := .Sources -}}
-    		{{- if gt $index 0 }}, {{ end -}}
-			vec_subquery_{{ $value }}.chunk
-		{{- end }}
+	coalesce(fts_ordered.content
+		{{- range $index, $value := .Sources -}}
+			, vec_subquery_{{ $value }}.chunk
+		{{- end -}}
 	) AS content,
+	{{ if eq (len .Sources) 1 -}}
+		vec_subquery_{{ index .Sources 0 }}.distance AS vec_distance,
+	{{ else -}}
+		coalesce(
+			{{- range $index, $value := .Sources -}}
+				{{- if gt $index 0 }}, {{ end -}}
+				vec_subquery_{{ $value }}.distance
+			{{- end -}}
+		) AS vec_distance,
+	{{ end -}}
 
-   coalesce(
-		{{ range $index, $value := .Sources -}}
-			{{- if gt $index 0 }}, {{ end -}}
-			vec_subquery_{{ $value }}.distance
-		{{- end }}
-	) AS vec_distance,
+	{{ if eq (len .Sources) 1 -}}
+		vec_subquery_{{ index .Sources 0 }}.rank_number AS vec_rank,
+	{{- else -}}
+		coalesce(
+			{{- range $index, $value := .Sources -}}
+				{{- if gt $index 0 }}, {{ end -}}
+				vec_subquery_{{ $value }}.rank_number
+			{{- end -}}
+		) AS vec_rank,
+	{{ end -}}
 
-	coalesce(
-		{{ range $index, $value := .Sources -}}
-			{{- if gt $index 0 }}, {{ end -}}
-			vec_subquery_{{ $value }}.rank_number
-		{{- end }}
-	) AS vec_rank,
-
-  fts_ordered.rank_number AS fts_rank,
-
+	fts_ordered.rank_number AS fts_rank,
 	(
 		{{ range $index, $value := .Sources -}}
 			coalesce(1.0 / (60 + vec_subquery_{{ $value }}.rank_number) * 0.5, 0.0) +
 		{{ end -}}
-    coalesce(1.0 / (60 + fts_ordered.rank_number), 0.0)
+	coalesce(1.0 / (60 + fts_ordered.rank_number), 0.0)
 	) AS combined_rank
 FROM fts_ordered
 {{ range $index, $value := .Sources -}}
 	FULL OUTER JOIN vec_subquery_{{ $value }} USING (page)
 {{ end -}}
 JOIN pages ON pages.id = coalesce(
-	fts_ordered.page, {{ range $index, $value := .Sources -}}
-	{{- if gt $index 0 }}, {{ end -}}
-		vec_subquery_{{ $value }}.page
+	fts_ordered.page {{- range $index, $value := .Sources -}}
+		, vec_subquery_{{ $value }}.page
 	{{- end }}
 )
 ORDER BY combined_rank DESC;
