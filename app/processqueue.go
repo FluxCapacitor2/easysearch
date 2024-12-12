@@ -39,6 +39,12 @@ func startQueueJob(db database.Database, config *config.Config) {
 		interval := 60.0 / float64(src.Embeddings.Speed)
 
 		if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(interval*float64(time.Second))), gocron.NewTask(func() {
+
+			err = db.StartEmbeddings(src.ID, src.Embeddings.ChunkSize, src.Embeddings.ChunkOverlap)
+			if err != nil {
+				fmt.Printf("Error queueing pages that need embeddings: %v\n", err)
+			}
+
 			processEmbedQueue(db, src)
 		})); err != nil {
 			fmt.Printf("Error creating embedding job: %v", err)
@@ -53,18 +59,6 @@ func startQueueJob(db database.Database, config *config.Config) {
 		err := db.Cleanup()
 		if err != nil {
 			fmt.Printf("Error cleaning queue: %v\n", err)
-		}
-
-		err = db.StartEmbeddings(func(sourceID string) (chunkSize int, chunkOverlap int) {
-			for _, src := range config.Sources {
-				if src.ID == sourceID {
-					return src.Embeddings.ChunkSize, src.Embeddings.ChunkOverlap
-				}
-			}
-			return 200, 30
-		})
-		if err != nil {
-			fmt.Printf("Error queueing pages that need embeddings: %v\n", err)
 		}
 	})); err != nil {
 		fmt.Printf("Failed to create cleanup job: %v\n", err)

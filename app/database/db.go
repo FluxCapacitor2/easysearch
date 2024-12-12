@@ -56,7 +56,7 @@ type Database interface {
 	AddEmbedding(pageID int64, sourceID string, chunkIndex int, chunk string, vector []float32) error
 
 	// Adds pages with no embeddings to the embed queue
-	StartEmbeddings(getChunkDetails func(sourceID string) (chunkSize int, chunkOverlap int)) error
+	StartEmbeddings(source string, chunkSize int, chunkOverlap int) error
 
 	SimilaritySearch(sourceID string, query []float32, limit int) ([]SimilarityResult, error)
 	HybridSearch(sources []string, queryString string, embeddedQueries map[string][]float32, limit int) ([]HybridResult, error)

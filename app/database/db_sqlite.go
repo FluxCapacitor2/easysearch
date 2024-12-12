@@ -791,22 +791,20 @@ func (db *SQLiteDatabase) Cleanup() error {
 	return err
 }
 
-func (db *SQLiteDatabase) StartEmbeddings(getChunkDetails func(sourceID string) (chunkSize int, chunkOverlap int)) error {
+func (db *SQLiteDatabase) StartEmbeddings(source string, chunkSize int, chunkOverlap int) error {
 	// If a page has been indexed but has no embeddings, make sure an embedding job has been queued
-	rows, err := db.conn.Query("SELECT id, source, content FROM pages WHERE status = ? AND id NOT IN (SELECT page FROM vec_chunks) AND id NOT IN (SELECT page FROM embed_queue);", Finished)
+	rows, err := db.conn.Query("SELECT id, content FROM pages WHERE source = ? AND status = ? AND id NOT IN (SELECT page FROM vec_chunks) AND id NOT IN (SELECT page FROM embed_queue);", source, Finished)
 	if err != nil {
 		return fmt.Errorf("error finding pages without embeddings: %v", err)
 	}
 	for rows.Next() {
 		var id int64
-		var sourceID string
 		var content string
-		err := rows.Scan(&id, &sourceID, &content)
+		err := rows.Scan(&id, &content)
 		if err != nil {
 			return err
 		}
 
-		chunkSize, chunkOverlap := getChunkDetails(sourceID)
 		chunks, err := embedding.ChunkText(content, chunkSize, chunkOverlap)
 
 		if err != nil {

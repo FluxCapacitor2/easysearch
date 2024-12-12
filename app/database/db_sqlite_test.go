@@ -50,7 +50,7 @@ func TestStartEmbeddings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error creating vector table: %v\n", err)
 	}
-	err = db.StartEmbeddings(func(sourceID string) (chunkSize int, chunkOverlap int) { return 200, 30 })
+	err = db.StartEmbeddings("1", 200, 30)
 	if err != nil {
 		t.Fatalf("error occurred in StartEmbeddings: %v\n", err)
 	}
