@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 
@@ -44,7 +45,7 @@ func main() {
 
 	{
 		// Create DB tables if they don't exist (and set SQLite to WAL mode)
-		err := db.Setup()
+		err := db.Setup(context.Background())
 
 		if err != nil {
 			panic(fmt.Sprintf("Failed to set up database: %v", err))
@@ -52,7 +53,7 @@ func main() {
 
 		for _, src := range config.Sources {
 			if src.Embeddings.Enabled {
-				err := db.SetupVectorTables(src.ID, src.Embeddings.Dimensions)
+				err := db.SetupVectorTables(context.Background(), src.ID, src.Embeddings.Dimensions)
 				if err != nil {
 					panic(fmt.Sprintf("Failed to set up embeddings database tables for source %v: %v", src.ID, err))
 				}
@@ -64,7 +65,7 @@ func main() {
 	go startQueueJob(db, config)
 
 	// If the base page for a source hasn't been crawled yet, queue it
-	go startCrawl(db, config)
+	go startCrawl(context.Background(), db, config)
 
 	// Refresh pages automatically after a certain amount of time
 	go startRefreshJob(db, config)
@@ -73,12 +74,12 @@ func main() {
 	server.Start(db, config)
 }
 
-func startCrawl(db database.Database, config *config.Config) {
+func startCrawl(ctx context.Context, db database.Database, config *config.Config) {
 	// Find all sites listed in the configuration that haven't been crawled yet.
 	// Then, add their base URLs to the queue.
 
 	for _, src := range config.Sources {
-		exists, err := db.HasDocument(src.ID, src.URL)
+		exists, err := db.HasDocument(context.Background(), src.ID, src.URL)
 
 		if err != nil {
 			fmt.Printf("Failed to look up document '%v'/'%v' in pages table: %v\n", src.ID, src.URL, err)
@@ -89,12 +90,12 @@ func startCrawl(db database.Database, config *config.Config) {
 				if err != nil {
 					fmt.Printf("Failed to parse start URL for source %v (%v): %v\n", src.ID, src.URL, err)
 				} else {
-					canonical, err := crawler.Canonicalize(src.ID, db, parsed)
+					canonical, err := crawler.Canonicalize(ctx, src.ID, db, parsed)
 					if err != nil {
 						fmt.Printf("Failed to find canonical URL for page %v: %v\n", parsed.String(), err)
 						continue
 					}
-					err = db.AddToQueue(src.ID, canonical.String(), []string{canonical.String()}, 0, false)
+					err = db.AddToQueue(context.Background(), src.ID, canonical.String(), []string{canonical.String()}, 0, false)
 					if err != nil {
 						fmt.Printf("Failed to add page %v to queue: %v\n", src.URL, err)
 					}

@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"path"
 	"reflect"
 	"testing"
@@ -17,7 +18,7 @@ func createDB(t *testing.T) Database {
 		t.Fatalf("database creation failed: %v", err)
 	}
 
-	if err := db.Setup(); err != nil {
+	if err := db.Setup(context.Background()); err != nil {
 		t.Fatalf("database setup failed: %v", err)
 	}
 
@@ -30,7 +31,7 @@ func TestSetup(t *testing.T) {
 
 func TestVecSetup(t *testing.T) {
 	db := createDB(t)
-	err := db.SetupVectorTables("1", 768)
+	err := db.SetupVectorTables(context.Background(), "1", 768)
 	if err != nil {
 		t.Fatalf("error setting up vector tables: %v\n", err)
 	}
@@ -38,7 +39,7 @@ func TestVecSetup(t *testing.T) {
 
 func TestCleanup(t *testing.T) {
 	db := createDB(t)
-	err := db.Cleanup()
+	err := db.Cleanup(context.Background())
 	if err != nil {
 		t.Fatalf("error occurred in Cleanup: %v\n", err)
 	}
@@ -46,11 +47,11 @@ func TestCleanup(t *testing.T) {
 
 func TestStartEmbeddings(t *testing.T) {
 	db := createDB(t)
-	err := db.SetupVectorTables("1", 768)
+	err := db.SetupVectorTables(context.Background(), "1", 768)
 	if err != nil {
 		t.Fatalf("error creating vector table: %v\n", err)
 	}
-	err = db.StartEmbeddings("1", 200, 30)
+	err = db.StartEmbeddings(context.Background(), "1", 200, 30)
 	if err != nil {
 		t.Fatalf("error occurred in StartEmbeddings: %v\n", err)
 	}
@@ -78,11 +79,11 @@ func TestEscape(t *testing.T) {
 func TestPopQueue(t *testing.T) {
 	db := createDB(t)
 
-	db.AddToQueue("source1", "https://www.bswanson.dev", []string{"https://example.com/"}, 1, false)
+	db.AddToQueue(context.Background(), "source1", "https://www.bswanson.dev", []string{"https://example.com/"}, 1, false)
 
 	// The first time, there should be an item to pop off the queue
 	{
-		res, err := db.PopQueue("source1")
+		res, err := db.PopQueue(context.Background(), "source1")
 
 		if res == nil {
 			t.Fatalf("expected non-nil QueueItem")
@@ -95,7 +96,7 @@ func TestPopQueue(t *testing.T) {
 
 	// The second time, the first item shouldn't be accessible via PopQueue
 	{
-		res, err := db.PopQueue("source1")
+		res, err := db.PopQueue(context.Background(), "source1")
 
 		if res != nil {
 			t.Fatalf("expected nil QueueItem, got %v", res)
@@ -110,9 +111,9 @@ func TestPopQueue(t *testing.T) {
 func TestPopQueueWithOtherSource(t *testing.T) {
 	db := createDB(t)
 
-	db.AddToQueue("source1", "https://www.bswanson.dev", []string{"https://example.com/"}, 1, false)
+	db.AddToQueue(context.Background(), "source1", "https://www.bswanson.dev", []string{"https://example.com/"}, 1, false)
 
-	res, err := db.PopQueue("source2")
+	res, err := db.PopQueue(context.Background(), "source2")
 
 	if res != nil {
 		t.Fatalf("expected nil, got %v", res)
@@ -168,9 +169,9 @@ func TestProcessResultEmptyEnd(t *testing.T) {
 func TestHasDocument(t *testing.T) {
 	db := createDB(t)
 
-	db.AddDocument("source1", 1, []int64{}, "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.", "")
+	db.AddDocument(context.Background(), "source1", 1, []int64{}, "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.", "")
 
-	res, err := db.HasDocument("source1", "https://example.com/")
+	res, err := db.HasDocument(context.Background(), "source1", "https://example.com/")
 	if err != nil {
 		t.Fatalf("error fetching document: %v", err)
 	}
@@ -194,9 +195,9 @@ func TestGetDocument(t *testing.T) {
 		ErrorInfo:   "",
 	}
 
-	db.AddDocument(page.Source, page.Depth, []int64{}, page.URL, page.Status, page.Title, page.Description, page.Content, page.ErrorInfo)
+	db.AddDocument(context.Background(), page.Source, page.Depth, []int64{}, page.URL, page.Status, page.Title, page.Description, page.Content, page.ErrorInfo)
 
-	doc, err := db.GetDocument("source1", "https://example.com/")
+	doc, err := db.GetDocument(context.Background(), "source1", "https://example.com/")
 	if err != nil {
 		t.Fatalf("error fetching document: %v", err)
 	}
@@ -213,20 +214,20 @@ func TestGetDocument(t *testing.T) {
 func TestDeleteCanonicalsOnDeletePage(t *testing.T) {
 	db := createDB(t)
 
-	_, err := db.AddDocument("source1", 0, []int64{}, "https://example.com/", Finished, "Title", "Description", "Content", "")
+	_, err := db.AddDocument(context.Background(), "source1", 0, []int64{}, "https://example.com/", Finished, "Title", "Description", "Content", "")
 	if err != nil {
 		t.Fatalf("failed to add page: %v", err)
 	}
-	err = db.SetCanonical("source1", "https://www.example.com/", "https://example.com/")
+	err = db.SetCanonical(context.Background(), "source1", "https://www.example.com/", "https://example.com/")
 	if err != nil {
 		t.Fatalf("failed to set canonical: %v", err)
 	}
-	err = db.RemoveDocument("source1", "https://example.com/")
+	err = db.RemoveDocument(context.Background(), "source1", "https://example.com/")
 	if err != nil {
 		t.Fatalf("failed to delete document: %v", err)
 	}
 
-	canonical, err := db.GetCanonical("source1", "https://www.example.com/")
+	canonical, err := db.GetCanonical(context.Background(), "source1", "https://www.example.com/")
 	if err != nil {
 		t.Fatalf("failed to get canonical: %v", err)
 	}
@@ -239,7 +240,7 @@ func TestDeleteCanonicalsOnDeletePage(t *testing.T) {
 func TestSearchQuery(t *testing.T) {
 	db := createDB(t)
 
-	_, err := db.AddDocument("source1", 1, []int64{}, "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.", "")
+	_, err := db.AddDocument(context.Background(), "source1", 1, []int64{}, "https://example.com/", Finished, "Example Domain", "", "This domain is for use in illustrative examples in documents. You may use this domain in literature without prior coordination or asking for permission.", "")
 	if err != nil {
 		t.Fatalf("error adding document: %v", err)
 	}
@@ -257,7 +258,7 @@ func TestSearchQuery(t *testing.T) {
 	}
 
 	for _, testCase := range phrases {
-		results, count, err := db.Search([]string{"source1"}, testCase.phrase, 1, 10)
+		results, count, err := db.Search(context.Background(), []string{"source1"}, testCase.phrase, 1, 10)
 
 		if err != nil {
 			t.Fatalf("error fetching results for query '%v': %v", testCase.phrase, err)
@@ -276,17 +277,17 @@ func TestSearchQuery(t *testing.T) {
 func TestQueuePagesOlderThan(t *testing.T) {
 	db := createDB(t)
 
-	_, err := db.AddDocument("source", 1, []int64{}, "", Finished, "", "", "", "")
+	_, err := db.AddDocument(context.Background(), "source", 1, []int64{}, "", Finished, "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error adding document: %v", err)
 	}
 	time.Sleep(1 * time.Second) // Ensure the document is at least 1 second old
-	err = db.QueuePagesOlderThan("source", 0)
+	err = db.QueuePagesOlderThan(context.Background(), "source", 0)
 	if err != nil {
 		t.Fatalf("failed to queue pages older than 0 days: %v", err)
 	}
 
-	doc, err := db.PopQueue("source")
+	doc, err := db.PopQueue(context.Background(), "source")
 	if err != nil {
 		t.Fatalf("error popping queue: %v", err)
 	}
@@ -294,7 +295,7 @@ func TestQueuePagesOlderThan(t *testing.T) {
 		t.Fatalf("page was not queued; expected to be able to pop 1 item off the queue")
 	}
 
-	doc, err = db.PopQueue("source")
+	doc, err = db.PopQueue(context.Background(), "source")
 	if err != nil {
 		t.Fatalf("error popping queue: %v", err)
 	}

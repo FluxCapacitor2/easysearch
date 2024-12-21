@@ -2,6 +2,7 @@ package database
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"fmt"
 	"regexp"
@@ -29,18 +30,18 @@ var setupCommands string
 //go:embed db_sqlite_embedding.sql
 var embedSetupCommands string
 
-func (db *SQLiteDatabase) Setup() error {
-	_, err := db.conn.Exec(setupCommands)
+func (db *SQLiteDatabase) Setup(ctx context.Context) error {
+	_, err := db.conn.ExecContext(ctx, setupCommands)
 	return err
 }
 
-func (db *SQLiteDatabase) SetupVectorTables(sourceID string, dimensions int) error {
-	_, err := db.conn.Exec(fmt.Sprintf(embedSetupCommands, sourceID, dimensions, sourceID, sourceID, sourceID, sourceID))
+func (db *SQLiteDatabase) SetupVectorTables(ctx context.Context, sourceID string, dimensions int) error {
+	_, err := db.conn.ExecContext(ctx, fmt.Sprintf(embedSetupCommands, sourceID, dimensions, sourceID, sourceID, sourceID, sourceID))
 	return err
 }
 
-func (db *SQLiteDatabase) DropVectorTables(sourceID string) error {
-	_, err := db.conn.Exec(fmt.Sprintf(`
+func (db *SQLiteDatabase) DropVectorTables(ctx context.Context, sourceID string) error {
+	_, err := db.conn.ExecContext(ctx, fmt.Sprintf(`
 	DROP TABLE IF EXISTS pages_vec_%s;
 	DROP TRIGGER IF EXISTS pages_refresh_vector_embeddings_%s;
 	DROP TRIGGER IF EXISTS delete_embedding_on_delete_chunk_%s;
@@ -48,16 +49,16 @@ func (db *SQLiteDatabase) DropVectorTables(sourceID string) error {
 	return err
 }
 
-func (db *SQLiteDatabase) AddDocument(source string, depth int32, referrers []int64, url string, status QueueItemStatus, title string, description string, content string, errorInfo string) (int64, error) {
+func (db *SQLiteDatabase) AddDocument(ctx context.Context, source string, depth int32, referrers []int64, url string, status QueueItemStatus, title string, description string, content string, errorInfo string) (int64, error) {
 	id := int64(-1)
-	tx, err := db.conn.Begin()
+	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		if err := tx.Rollback(); err != nil {
 			return id, err
 		}
 		return id, err
 	}
-	err = tx.QueryRow("REPLACE INTO pages (source, depth, status, url, title, description, content, errorInfo) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING (id);", source, depth, status, url, title, description, content, errorInfo).Scan(&id)
+	err = tx.QueryRowContext(ctx, "REPLACE INTO pages (source, depth, status, url, title, description, content, errorInfo) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING (id);", source, depth, status, url, title, description, content, errorInfo).Scan(&id)
 	if err != nil {
 		if err := tx.Rollback(); err != nil {
 			return id, err
@@ -66,7 +67,7 @@ func (db *SQLiteDatabase) AddDocument(source string, depth int32, referrers []in
 	}
 
 	for _, ref := range referrers {
-		_, err = tx.Exec("INSERT INTO pages_referrers (source, dest) VALUES (?, ?);", ref, id)
+		_, err = tx.ExecContext(ctx, "INSERT INTO pages_referrers (source, dest) VALUES (?, ?);", ref, id)
 		if err != nil {
 			if err := tx.Rollback(); err != nil {
 				return id, err
@@ -86,23 +87,23 @@ func (db *SQLiteDatabase) AddDocument(source string, depth int32, referrers []in
 	return id, err
 }
 
-func (db *SQLiteDatabase) AddReferrer(source int64, dest int64) error {
-	_, err := db.conn.Exec("INSERT INTO pages_referrers (source, dest) VALUES (?, ?) ON CONFLICT DO NOTHING;", source, dest)
+func (db *SQLiteDatabase) AddReferrer(ctx context.Context, source int64, dest int64) error {
+	_, err := db.conn.ExecContext(ctx, "INSERT INTO pages_referrers (source, dest) VALUES (?, ?) ON CONFLICT DO NOTHING;", source, dest)
 	return err
 }
 
-func (db *SQLiteDatabase) RemoveReferrer(source int64, dest int64) error {
-	_, err := db.conn.Exec("DELETE FROM pages_referrers WHERE source = ? AND dest = ?;", source, dest)
+func (db *SQLiteDatabase) RemoveReferrer(ctx context.Context, source int64, dest int64) error {
+	_, err := db.conn.ExecContext(ctx, "DELETE FROM pages_referrers WHERE source = ? AND dest = ?;", source, dest)
 	return err
 }
 
-func (db *SQLiteDatabase) RemoveAllReferences(source int64) error {
-	_, err := db.conn.Exec("DELETE FROM pages_referrers WHERE source = ?;", source)
+func (db *SQLiteDatabase) RemoveAllReferences(ctx context.Context, source int64) error {
+	_, err := db.conn.ExecContext(ctx, "DELETE FROM pages_referrers WHERE source = ?;", source)
 	return err
 }
 
-func (db *SQLiteDatabase) GetReferences(pageID int64) ([]int64, error) {
-	rows, err := db.conn.Query("SELECT dest FROM pages_referrers WHERE source = ?;", pageID)
+func (db *SQLiteDatabase) GetReferences(ctx context.Context, pageID int64) ([]int64, error) {
+	rows, err := db.conn.QueryContext(ctx, "SELECT dest FROM pages_referrers WHERE source = ?;", pageID)
 	if err != nil {
 		return nil, err
 	}
@@ -119,8 +120,8 @@ func (db *SQLiteDatabase) GetReferences(pageID int64) ([]int64, error) {
 	return references, nil
 }
 
-func (db *SQLiteDatabase) GetReferrers(pageID int64) ([]int64, error) {
-	rows, err := db.conn.Query("SELECT source FROM pages_referrers WHERE dest = ?;", pageID)
+func (db *SQLiteDatabase) GetReferrers(ctx context.Context, pageID int64) ([]int64, error) {
+	rows, err := db.conn.QueryContext(ctx, "SELECT source FROM pages_referrers WHERE dest = ?;", pageID)
 	if err != nil {
 		return nil, err
 	}
@@ -137,8 +138,8 @@ func (db *SQLiteDatabase) GetReferrers(pageID int64) ([]int64, error) {
 	return referrers, nil
 }
 
-func (db *SQLiteDatabase) ListOrphanPages() ([]int64, error) {
-	rows, err := db.conn.Query("SELECT id FROM pages WHERE id NOT IN (SELECT dest FROM pages_referrers);")
+func (db *SQLiteDatabase) ListOrphanPages(ctx context.Context) ([]int64, error) {
+	rows, err := db.conn.QueryContext(ctx, "SELECT id FROM pages WHERE id NOT IN (SELECT dest FROM pages_referrers);")
 	if err != nil {
 		return nil, err
 	}
@@ -156,13 +157,13 @@ func (db *SQLiteDatabase) ListOrphanPages() ([]int64, error) {
 	return pageIDs, nil
 }
 
-func (db *SQLiteDatabase) RemoveDocument(source string, url string) error {
-	_, err := db.conn.Exec("DELETE FROM pages WHERE source = ? AND url = ?;", source, url)
+func (db *SQLiteDatabase) RemoveDocument(ctx context.Context, source string, url string) error {
+	_, err := db.conn.ExecContext(ctx, "DELETE FROM pages WHERE source = ? AND url = ?;", source, url)
 	return err
 }
 
-func (db *SQLiteDatabase) HasDocument(source string, url string) (*bool, error) {
-	cursor := db.conn.QueryRow("SELECT 1 FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
+func (db *SQLiteDatabase) HasDocument(ctx context.Context, source string, url string) (*bool, error) {
+	cursor := db.conn.QueryRowContext(ctx, "SELECT 1 FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
 
 	exists := false
 	err := cursor.Scan(&exists)
@@ -178,8 +179,8 @@ func (db *SQLiteDatabase) HasDocument(source string, url string) (*bool, error) 
 	return &exists, nil
 }
 
-func (db *SQLiteDatabase) GetDocument(source string, url string) (*Page, error) {
-	cursor := db.conn.QueryRow("SELECT id, source, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
+func (db *SQLiteDatabase) GetDocument(ctx context.Context, source string, url string) (*Page, error) {
+	cursor := db.conn.QueryRowContext(ctx, "SELECT id, source, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE source = ? AND (url = ? OR url IN (SELECT canonical FROM canonicals WHERE url = ?));", source, url, url)
 
 	page := Page{}
 	err := cursor.Scan(&page.ID, &page.Source, &page.URL, &page.Title, &page.Description, &page.Content, &page.Depth, &page.CrawledAt, &page.Status, &page.ErrorInfo)
@@ -195,8 +196,8 @@ func (db *SQLiteDatabase) GetDocument(source string, url string) (*Page, error) 
 	return &page, nil
 }
 
-func (db *SQLiteDatabase) GetDocumentByID(id int64) (*Page, error) {
-	cursor := db.conn.QueryRow("SELECT id, source, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE id = ?;", id)
+func (db *SQLiteDatabase) GetDocumentByID(ctx context.Context, id int64) (*Page, error) {
+	cursor := db.conn.QueryRowContext(ctx, "SELECT id, source, url, title, description, content, depth, crawledAt, status, errorInfo FROM pages WHERE id = ?;", id)
 
 	page := Page{}
 	err := cursor.Scan(&page.ID, &page.Source, &page.URL, &page.Title, &page.Description, &page.Content, &page.Depth, &page.CrawledAt, &page.Status, &page.ErrorInfo)
@@ -238,12 +239,7 @@ func escape(searchTerm string) string {
 	return quoted
 }
 
-func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, pageSize uint32) ([]FTSResult, *uint32, error) {
-
-	tx, err := db.conn.Begin()
-	if err != nil {
-		return nil, nil, err
-	}
+func (db *SQLiteDatabase) Search(ctx context.Context, sources []string, search string, page uint32, pageSize uint32) ([]FTSResult, *uint32, error) {
 
 	start := uuid.New().String()
 	end := uuid.New().String()
@@ -281,7 +277,7 @@ func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, p
 		(page-1)*pageSize,
 	)
 
-	rows, err := db.conn.Query(query, args...)
+	rows, err := db.conn.QueryContext(ctx, query, args...)
 
 	if err != nil {
 		return nil, nil, err
@@ -310,16 +306,9 @@ func (db *SQLiteDatabase) Search(sources []string, search string, page uint32, p
 
 	var total *uint32
 	{
-		cursor := tx.QueryRow(
-			fmt.Sprintf("SELECT COUNT(*) FROM pages JOIN pages_fts ON pages.rowid = pages_fts.rowid WHERE pages.source IN (%s) AND pages.status = ? AND pages_fts MATCH ?", strings.Repeat("?, ", len(sources)-1)+"?"), args[6:8+len(sources)]...)
+		cursor := db.conn.QueryRowContext(
+			ctx, fmt.Sprintf("SELECT COUNT(*) FROM pages JOIN pages_fts ON pages.rowid = pages_fts.rowid WHERE pages.source IN (%s) AND pages.status = ? AND pages_fts MATCH ?", strings.Repeat("?, ", len(sources)-1)+"?"), args[6:8+len(sources)]...)
 		err := cursor.Scan(&total)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	{
-		err := tx.Commit()
 		if err != nil {
 			return nil, nil, err
 		}
@@ -371,14 +360,14 @@ func processResult(input string, start string, end string) []Match {
 	}
 }
 
-func (db *SQLiteDatabase) SimilaritySearch(sourceID string, query []float32, limit int) ([]SimilarityResult, error) {
+func (db *SQLiteDatabase) SimilaritySearch(ctx context.Context, sourceID string, query []float32, limit int) ([]SimilarityResult, error) {
 
 	serialized, err := vec.SerializeFloat32(query)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := db.conn.Query(fmt.Sprintf(`
+	rows, err := db.conn.QueryContext(ctx, fmt.Sprintf(`
 	SELECT pages_vec_%s.distance, pages.url, pages.title, vec_chunks.chunk FROM pages_vec_%s
 	JOIN vec_chunks USING (id)
 	JOIN pages ON pages.id = vec_chunks.page
@@ -496,7 +485,7 @@ JOIN pages ON pages.id = coalesce(
 ORDER BY combined_rank DESC;
 `))
 
-func (db *SQLiteDatabase) HybridSearch(sources []string, queryString string, embeddedQueries map[string][]float32, limit int) ([]HybridResult, error) {
+func (db *SQLiteDatabase) HybridSearch(ctx context.Context, sources []string, queryString string, embeddedQueries map[string][]float32, limit int) ([]HybridResult, error) {
 
 	// Convert the query vectors to a blob format that `sqlite-vec` will accept
 	serializedQueries := make(map[string][]byte)
@@ -538,7 +527,7 @@ func (db *SQLiteDatabase) HybridSearch(sources []string, queryString string, emb
 
 	args = append(args, Finished, queryString, limit)
 
-	rows, err := db.conn.Query(query.String(), args...)
+	rows, err := db.conn.QueryContext(ctx, query.String(), args...)
 
 	if err != nil {
 		return nil, err
@@ -562,14 +551,14 @@ func (db *SQLiteDatabase) HybridSearch(sources []string, queryString string, emb
 	return results, err
 }
 
-func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []string, depth int32, isRefresh bool) error {
+func (db *SQLiteDatabase) AddToQueue(ctx context.Context, source string, referrer string, urls []string, depth int32, isRefresh bool) error {
 
-	page, err := db.GetDocument(source, referrer)
+	page, err := db.GetDocument(ctx, source, referrer)
 	if err != nil {
 		return fmt.Errorf("error looking up referring page: %v", err)
 	}
 
-	tx, err := db.conn.Begin()
+	tx, err := db.conn.BeginTx(ctx, nil)
 
 	if err != nil {
 		return err
@@ -579,7 +568,7 @@ func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []stri
 		// Insert a crawl queue entry (or use an existing one) and get its ID
 		// The seemingly-useless ON CONFLICT clause makes sure the ID is returned, even if the row already exists
 		var id int64
-		err := tx.QueryRow("INSERT INTO crawl_queue (source, url, depth, isRefresh) VALUES (?, ?, ?, ?) ON CONFLICT DO UPDATE SET url = url RETURNING id;", source, url, depth, isRefresh).Scan(&id)
+		err := tx.QueryRowContext(ctx, "INSERT INTO crawl_queue (source, url, depth, isRefresh) VALUES (?, ?, ?, ?) ON CONFLICT DO UPDATE SET url = url RETURNING id;", source, url, depth, isRefresh).Scan(&id)
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				return rbErr
@@ -591,7 +580,7 @@ func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []stri
 		if page == nil {
 			continue
 		}
-		_, err = tx.Exec("INSERT INTO crawl_queue_referrers (queueItem, referrer) VALUES (?, ?) ON CONFLICT DO NOTHING;", id, page.ID)
+		_, err = tx.ExecContext(ctx, "INSERT INTO crawl_queue_referrers (queueItem, referrer) VALUES (?, ?) ON CONFLICT DO NOTHING;", id, page.ID)
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				return rbErr
@@ -604,15 +593,15 @@ func (db *SQLiteDatabase) AddToQueue(source string, referrer string, urls []stri
 	return err
 }
 
-func (db *SQLiteDatabase) AddToEmbedQueue(pageID int64, chunks []string) error {
+func (db *SQLiteDatabase) AddToEmbedQueue(ctx context.Context, pageID int64, chunks []string) error {
 
-	tx, err := db.conn.Begin()
+	tx, err := db.conn.BeginTx(ctx, nil)
 
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Exec("DELETE FROM embed_queue WHERE page = ?;", pageID)
+	_, err = tx.ExecContext(ctx, "DELETE FROM embed_queue WHERE page = ?;", pageID)
 	if err != nil {
 		rbErr := tx.Rollback()
 		if rbErr != nil {
@@ -623,7 +612,7 @@ func (db *SQLiteDatabase) AddToEmbedQueue(pageID int64, chunks []string) error {
 
 	i := 0
 	for _, chunk := range chunks {
-		_, err := tx.Exec("INSERT INTO embed_queue (page, chunkIndex, chunk) VALUES (?, ?, ?);", pageID, i, chunk)
+		_, err := tx.ExecContext(ctx, "INSERT INTO embed_queue (page, chunkIndex, chunk) VALUES (?, ?, ?);", pageID, i, chunk)
 		if err != nil {
 			rbErr := tx.Rollback()
 			if rbErr != nil {
@@ -639,9 +628,9 @@ func (db *SQLiteDatabase) AddToEmbedQueue(pageID int64, chunks []string) error {
 	return err
 }
 
-func (db *SQLiteDatabase) PopQueue(source string) (*QueueItem, error) {
+func (db *SQLiteDatabase) PopQueue(ctx context.Context, source string) (*QueueItem, error) {
 	// Find the first item in the queue and update it in one step. If the row isn't returned, another process must have updated it at the same time.
-	row := db.conn.QueryRow(`
+	row := db.conn.QueryRowContext(ctx, `
 	  UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE rowid = (
 	    SELECT rowid FROM crawl_queue WHERE status = ? AND source = ? ORDER BY addedAt LIMIT 1
 	  ) RETURNING id, source, url, status, depth, isRefresh, addedAt, updatedAt;
@@ -658,7 +647,7 @@ func (db *SQLiteDatabase) PopQueue(source string) (*QueueItem, error) {
 	}
 
 	var referrers []int64
-	rows, err := db.conn.Query("SELECT referrer FROM crawl_queue_referrers WHERE queueItem = ?;", item.ID)
+	rows, err := db.conn.QueryContext(ctx, "SELECT referrer FROM crawl_queue_referrers WHERE queueItem = ?;", item.ID)
 
 	if err != nil {
 		return nil, err
@@ -678,9 +667,9 @@ func (db *SQLiteDatabase) PopQueue(source string) (*QueueItem, error) {
 	return item, nil
 }
 
-func (db *SQLiteDatabase) PopEmbedQueue(limit int, source string) ([]EmbedQueueItem, error) {
+func (db *SQLiteDatabase) PopEmbedQueue(ctx context.Context, limit int, source string) ([]EmbedQueueItem, error) {
 	// Find the first item in the queue and update it in one step. If the row isn't returned, another process must have updated it at the same time.
-	rows, err := db.conn.Query(`
+	rows, err := db.conn.QueryContext(ctx, `
 	  UPDATE embed_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id IN (
 	    SELECT embed_queue.id FROM embed_queue JOIN pages ON embed_queue.page = pages.id WHERE embed_queue.status = ? AND pages.source = ? ORDER BY embed_queue.addedAt LIMIT ?
 	  ) RETURNING id, status, page, chunkIndex, chunk;
@@ -713,13 +702,13 @@ func (db *SQLiteDatabase) PopEmbedQueue(limit int, source string) ([]EmbedQueueI
 	return chunks, nil
 }
 
-func (db *SQLiteDatabase) AddEmbedding(pageID int64, sourceID string, chunkIndex int, chunk string, vector []float32) error {
+func (db *SQLiteDatabase) AddEmbedding(ctx context.Context, pageID int64, sourceID string, chunkIndex int, chunk string, vector []float32) error {
 	serialized, err := vec.SerializeFloat32(vector)
 	if err != nil {
 		return err
 	}
 
-	tx, err := db.conn.Begin()
+	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		if err := tx.Rollback(); err != nil {
 			return err
@@ -728,7 +717,7 @@ func (db *SQLiteDatabase) AddEmbedding(pageID int64, sourceID string, chunkIndex
 	}
 
 	id := int64(-1)
-	err = tx.QueryRow("INSERT INTO vec_chunks (page, chunkIndex, chunk) VALUES (?, ?, ?) RETURNING id;", pageID, chunkIndex, chunk).Scan(&id)
+	err = tx.QueryRowContext(ctx, "INSERT INTO vec_chunks (page, chunkIndex, chunk) VALUES (?, ?, ?) RETURNING id;", pageID, chunkIndex, chunk).Scan(&id)
 	if err != nil {
 		if err := tx.Rollback(); err != nil {
 			return err
@@ -736,7 +725,7 @@ func (db *SQLiteDatabase) AddEmbedding(pageID int64, sourceID string, chunkIndex
 		return err
 	}
 
-	_, err = tx.Exec(fmt.Sprintf("INSERT INTO pages_vec_%s (id, embedding) VALUES (?, ?);", sourceID), id, serialized)
+	_, err = tx.ExecContext(ctx, fmt.Sprintf("INSERT INTO pages_vec_%s (id, embedding) VALUES (?, ?);", sourceID), id, serialized)
 	if err != nil {
 		if err := tx.Rollback(); err != nil {
 			return err
@@ -749,30 +738,30 @@ func (db *SQLiteDatabase) AddEmbedding(pageID int64, sourceID string, chunkIndex
 	return err
 }
 
-func (db *SQLiteDatabase) UpdateQueueEntry(id int64, status QueueItemStatus) error {
+func (db *SQLiteDatabase) UpdateQueueEntry(ctx context.Context, id int64, status QueueItemStatus) error {
 	if status == Finished {
 		// If the item is finished, it can be immediately deleted
-		_, err := db.conn.Exec("DELETE FROM crawl_queue WHERE id = ?;", id)
+		_, err := db.conn.ExecContext(ctx, "DELETE FROM crawl_queue WHERE id = ?;", id)
 		return err
 	} else {
-		_, err := db.conn.Exec("UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?", status, id)
+		_, err := db.conn.ExecContext(ctx, "UPDATE crawl_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?", status, id)
 		return err
 	}
 }
 
-func (db *SQLiteDatabase) UpdateEmbedQueueEntry(id int64, status QueueItemStatus) error {
+func (db *SQLiteDatabase) UpdateEmbedQueueEntry(ctx context.Context, id int64, status QueueItemStatus) error {
 	if status == Finished {
 		// If the item is finished, it can be immediately deleted
-		_, err := db.conn.Exec("DELETE FROM embed_queue WHERE id = ?;", id)
+		_, err := db.conn.ExecContext(ctx, "DELETE FROM embed_queue WHERE id = ?;", id)
 		return err
 	} else {
-		_, err := db.conn.Exec("UPDATE embed_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?;", status, id)
+		_, err := db.conn.ExecContext(ctx, "UPDATE embed_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?;", status, id)
 		return err
 	}
 }
 
-func (db *SQLiteDatabase) Cleanup() error {
-	_, err := db.conn.Exec(`
+func (db *SQLiteDatabase) Cleanup(ctx context.Context) error {
+	_, err := db.conn.ExecContext(ctx, `
 		-- Clear all Finished queue items (this is a sanity check; they should be immediately deleted from UpdateQueueEntry)
 		DELETE FROM crawl_queue WHERE status = ?;
 
@@ -791,9 +780,9 @@ func (db *SQLiteDatabase) Cleanup() error {
 	return err
 }
 
-func (db *SQLiteDatabase) StartEmbeddings(source string, chunkSize int, chunkOverlap int) error {
+func (db *SQLiteDatabase) StartEmbeddings(ctx context.Context, source string, chunkSize int, chunkOverlap int) error {
 	// If a page has been indexed but has no embeddings, make sure an embedding job has been queued
-	rows, err := db.conn.Query("SELECT id, content FROM pages WHERE source = ? AND status = ? AND id NOT IN (SELECT page FROM vec_chunks) AND id NOT IN (SELECT page FROM embed_queue);", source, Finished)
+	rows, err := db.conn.QueryContext(ctx, "SELECT id, content FROM pages WHERE source = ? AND status = ? AND id NOT IN (SELECT page FROM vec_chunks) AND id NOT IN (SELECT page FROM embed_queue);", source, Finished)
 	if err != nil {
 		return fmt.Errorf("error finding pages without embeddings: %v", err)
 	}
@@ -819,7 +808,7 @@ func (db *SQLiteDatabase) StartEmbeddings(source string, chunkSize int, chunkOve
 			}
 		}
 
-		err = db.AddToEmbedQueue(id, filtered)
+		err = db.AddToEmbedQueue(ctx, id, filtered)
 		if err != nil {
 			return fmt.Errorf("error adding page to embedding queue: %v", err)
 		}
@@ -827,8 +816,8 @@ func (db *SQLiteDatabase) StartEmbeddings(source string, chunkSize int, chunkOve
 	return nil
 }
 
-func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) error {
-	rows, err := db.conn.Query("SELECT source, url, crawledAt, depth, status FROM pages WHERE url NOT IN (SELECT url FROM crawl_queue) AND source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
+func (db *SQLiteDatabase) QueuePagesOlderThan(ctx context.Context, source string, daysAgo int32) error {
+	rows, err := db.conn.QueryContext(ctx, "SELECT source, url, crawledAt, depth, status FROM pages WHERE url NOT IN (SELECT url FROM crawl_queue) AND source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
 
 	if err != nil {
 		return err
@@ -845,7 +834,7 @@ func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) erro
 		}
 
 		// The referrer is blank because the `pages` table entry already has all of its referrers recorded
-		err = db.AddToQueue(source, "", []string{row.URL}, row.Depth, true)
+		err = db.AddToQueue(ctx, source, "", []string{row.URL}, row.Depth, true)
 
 		if err != nil {
 			return err
@@ -855,8 +844,8 @@ func (db *SQLiteDatabase) QueuePagesOlderThan(source string, daysAgo int32) erro
 	return nil
 }
 
-func (db *SQLiteDatabase) GetCanonical(source string, url string) (*Canonical, error) {
-	cursor := db.conn.QueryRow("SELECT id, url, canonical, crawledAt FROM canonicals WHERE source = ? AND url = ?", source, url)
+func (db *SQLiteDatabase) GetCanonical(ctx context.Context, source string, url string) (*Canonical, error) {
+	cursor := db.conn.QueryRowContext(ctx, "SELECT id, url, canonical, crawledAt FROM canonicals WHERE source = ? AND url = ?", source, url)
 
 	canonical := &Canonical{}
 	err := cursor.Scan(&canonical.ID, &canonical.Original, &canonical.Canonical, &canonical.CrawledAt)
@@ -870,8 +859,8 @@ func (db *SQLiteDatabase) GetCanonical(source string, url string) (*Canonical, e
 	return canonical, nil
 }
 
-func (db *SQLiteDatabase) SetCanonical(source string, url string, canonical string) error {
-	_, err := db.conn.Exec("REPLACE INTO canonicals (source, url, canonical) VALUES (?, ?, ?)", source, url, canonical)
+func (db *SQLiteDatabase) SetCanonical(ctx context.Context, source string, url string, canonical string) error {
+	_, err := db.conn.ExecContext(ctx, "REPLACE INTO canonicals (source, url, canonical) VALUES (?, ?, ?)", source, url, canonical)
 	return err
 }
 

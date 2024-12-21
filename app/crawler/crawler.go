@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/url"
 	"slices"
@@ -38,7 +39,7 @@ type ExtractedPageContent struct {
 	ErrorInfo   string
 }
 
-func Crawl(source config.Source, currentDepth int32, referrers []int64, db database.Database, pageURL string) (*CrawlResult, error) {
+func Crawl(ctx context.Context, source config.Source, currentDepth int32, referrers []int64, db database.Database, pageURL string) (*CrawlResult, error) {
 
 	// Parse the URL, canonicalize it, and convert it back into a string for later use
 	orig, err := url.Parse(pageURL)
@@ -47,7 +48,7 @@ func Crawl(source config.Source, currentDepth int32, referrers []int64, db datab
 		return nil, err
 	}
 
-	parsedURL, err := Canonicalize(source.ID, db, orig)
+	parsedURL, err := Canonicalize(ctx, source.ID, db, orig)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +72,7 @@ func Crawl(source config.Source, currentDepth int32, referrers []int64, db datab
 		if err != nil {
 			return err
 		}
-		url, err := Canonicalize(source.ID, db, parsed)
+		url, err := Canonicalize(ctx, source.ID, db, parsed)
 		if err == nil {
 			urls[url.String()] = struct{}{}
 		}
@@ -148,8 +149,8 @@ func Crawl(source config.Source, currentDepth int32, referrers []int64, db datab
 
 		// If the crawler followed a redirect from an unindexed document to an indexed document,
 		// parsing and adding it to the DB is unnecessary. We can just record the redirect as a canonical.
-		if origExists, _ := db.HasDocument(source.ID, pageURL); origExists != nil && !*origExists {
-			if exists, _ := db.HasDocument(source.ID, page.Canonical); exists != nil && *exists {
+		if origExists, _ := db.HasDocument(ctx, source.ID, pageURL); origExists != nil && !*origExists {
+			if exists, _ := db.HasDocument(ctx, source.ID, page.Canonical); exists != nil && *exists {
 				cancelled = true
 				return
 			}
@@ -204,7 +205,7 @@ func Crawl(source config.Source, currentDepth int32, referrers []int64, db datab
 	}
 
 	if page.Canonical != pageURL {
-		err := db.SetCanonical(source.ID, pageURL, page.Canonical)
+		err := db.SetCanonical(ctx, source.ID, pageURL, page.Canonical)
 		if err != nil {
 			fmt.Printf("Failed to set canonical URL of page %v to %v: %v\n", pageURL, page.Canonical, err)
 		}
@@ -212,7 +213,7 @@ func Crawl(source config.Source, currentDepth int32, referrers []int64, db datab
 
 	if !cancelled {
 		text := Truncate(source.SizeLimit, page.Title, page.Description, page.Content)
-		id, addDocErr := db.AddDocument(source.ID, currentDepth, referrers, page.Canonical, page.Status, text[0], text[1], text[2], page.ErrorInfo)
+		id, addDocErr := db.AddDocument(ctx, source.ID, currentDepth, referrers, page.Canonical, page.Status, text[0], text[1], text[2], page.ErrorInfo)
 		result.PageID = id
 		if addDocErr != nil {
 			err = addDocErr
@@ -296,10 +297,10 @@ func getText(node *html.Node) string {
 }
 
 // Format URLs to keep them as consistent as possible
-func Canonicalize(src string, db database.Database, url *url.URL) (*url.URL, error) {
+func Canonicalize(ctx context.Context, src string, db database.Database, url *url.URL) (*url.URL, error) {
 
 	// Check if we already have a canonical URL recorded
-	canonical, err := db.GetCanonical(src, url.String())
+	canonical, err := db.GetCanonical(ctx, src, url.String())
 
 	if err != nil {
 		return nil, err

@@ -78,7 +78,7 @@ func Start(db database.Database, cfg *config.Config) {
 		page, err := strconv.ParseUint(req.URL.Query().Get("page"), 10, 32)
 
 		if q != "" && src != nil && len(src) > 0 && err == nil {
-			results, total, err := db.Search(src, q, uint32(page), 10)
+			results, total, err := db.Search(req.Context(), src, q, uint32(page), 10)
 			if err != nil {
 				response = httpResponse{
 					status:  500,
@@ -185,7 +185,7 @@ func Start(db database.Database, cfg *config.Config) {
 		allResults := make([]database.SimilarityResult, 0)
 
 		for _, s := range foundSources {
-			results, err := db.SimilaritySearch(s.ID, queryEmbeds[s.Embeddings.Model], 10)
+			results, err := db.SimilaritySearch(req.Context(), s.ID, queryEmbeds[s.Embeddings.Model], 10)
 			if err != nil {
 				fmt.Printf("Error generating search results: %v\n", err)
 				respond(httpResponse{
@@ -295,7 +295,7 @@ func Start(db database.Database, cfg *config.Config) {
 			return
 		}
 
-		results, err := db.HybridSearch(sourceList, q, embeddedQueries, 10)
+		results, err := db.HybridSearch(req.Context(), sourceList, q, embeddedQueries, 10)
 		if err != nil {
 			fmt.Printf("Error generating search results: %v\n", err)
 			respond(httpResponse{
@@ -358,7 +358,7 @@ func renderTemplateWithResults(db database.Database, config *config.Config, req 
 	if len(src) > 0 && len(q) > 0 && err == nil {
 		var err error
 		start := time.Now().UnixMicro()
-		results, total, err = db.Search(src, q, uint32(page), 10)
+		results, total, err = db.Search(req.Context(), src, q, uint32(page), 10)
 		end := time.Now().UnixMicro()
 
 		totalTime = end - start

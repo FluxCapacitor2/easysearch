@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -22,7 +23,7 @@ func startRefreshJob(db database.Database, config *config.Config) {
 		_, err := scheduler.NewJob(gocron.DurationJob(time.Duration(1*time.Minute)), gocron.NewTask(func() {
 			for _, src := range config.Sources {
 				if src.Refresh.Enabled {
-					err := db.QueuePagesOlderThan(src.ID, src.Refresh.MinAge)
+					err := db.QueuePagesOlderThan(context.Background(), src.ID, src.Refresh.MinAge)
 
 					if err != nil {
 						fmt.Printf("Error processing refresh for source %v: %v\n", src.ID, err)
