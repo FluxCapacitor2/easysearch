@@ -525,7 +525,7 @@ func (db *SQLiteDatabase) HybridSearch(ctx context.Context, sources []string, qu
 		args = append(args, src)
 	}
 
-	args = append(args, Finished, queryString, limit)
+	args = append(args, Finished, escape(queryString), limit)
 
 	rows, err := db.conn.QueryContext(ctx, query.String(), args...)
 
