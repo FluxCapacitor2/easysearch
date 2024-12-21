@@ -34,6 +34,10 @@ input[type="submit"] {
   padding-inline: 0;
   margin-bottom: 0.25rem;
 
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+
   li {
     display: inline;
   }
@@ -83,6 +87,9 @@ input[type="submit"] {
   p {
     margin-top: 0.5rem;
     color: #1e293b;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
   }
 }
 
