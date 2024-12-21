@@ -15,6 +15,7 @@ import (
 	"github.com/gocolly/colly"
 	"github.com/mmcdole/gofeed"
 	sitemap "github.com/oxffaa/gopher-parse-sitemap"
+	slogctx "github.com/veqryn/slog-context"
 	"golang.org/x/exp/maps"
 	"golang.org/x/net/html"
 )
@@ -55,11 +56,8 @@ func Crawl(ctx context.Context, source config.Source, currentDepth int32, referr
 
 	page := ExtractedPageContent{Canonical: parsedURL.String(), Status: database.Unindexable}
 
-	if page.Canonical != pageURL {
-		fmt.Printf("Crawling URL: %v (canonicalized from %v)\n", page.Canonical, pageURL)
-	} else {
-		fmt.Printf("Crawling URL: %v\n", page.Canonical)
-	}
+	slogctx.Info(ctx, "Crawling URL", "canonical", page.Canonical, "original", pageURL)
+
 	collector := colly.NewCollector()
 	collector.UserAgent = "Easysearch (+https://github.com/FluxCapacitor2/easysearch)"
 	collector.IgnoreRobotsTxt = false
@@ -207,7 +205,7 @@ func Crawl(ctx context.Context, source config.Source, currentDepth int32, referr
 	if page.Canonical != pageURL {
 		err := db.SetCanonical(ctx, source.ID, pageURL, page.Canonical)
 		if err != nil {
-			fmt.Printf("Failed to set canonical URL of page %v to %v: %v\n", pageURL, page.Canonical, err)
+			return result, fmt.Errorf("failed to set canonical URL of page %v to %v: %v", pageURL, page.Canonical, err)
 		}
 	}
 

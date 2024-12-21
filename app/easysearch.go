@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 
 	"github.com/fluxcapacitor2/easysearch/app/config"
@@ -11,6 +12,7 @@ import (
 	"github.com/fluxcapacitor2/easysearch/app/server"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/google/uuid"
+	slogctx "github.com/veqryn/slog-context"
 )
 
 // TODO: look into dependency injection instead of passing the DB and config into every function call
@@ -26,7 +28,7 @@ func main() {
 	}
 
 	gocron.AfterJobRunsWithPanic(func(jobID uuid.UUID, jobName string, recoverData interface{}) {
-		fmt.Printf("Panic in job %v (ID: %v): %+v\n", jobName, jobID, recoverData)
+		slog.Error("Cron job panicked", "jobName", jobName, "jobId", jobID, "recoverData", recoverData)
 	})
 
 	// Set up a database connection using the specified driver
@@ -82,22 +84,22 @@ func startCrawl(ctx context.Context, db database.Database, config *config.Config
 		exists, err := db.HasDocument(context.Background(), src.ID, src.URL)
 
 		if err != nil {
-			fmt.Printf("Failed to look up document '%v'/'%v' in pages table: %v\n", src.ID, src.URL, err)
+			slogctx.Error(ctx, "Failed to look up document", "sourceId", src.ID, "url", src.URL, "error", err)
 		} else {
 			if !*exists {
 				// If the document wasn't found, it should be added to the queue
 				parsed, err := url.Parse(src.URL)
 				if err != nil {
-					fmt.Printf("Failed to parse start URL for source %v (%v): %v\n", src.ID, src.URL, err)
+					slogctx.Error(ctx, "Failed to parse start URL", "sourceId", src.ID, "url", src.URL, "error", err)
 				} else {
 					canonical, err := crawler.Canonicalize(ctx, src.ID, db, parsed)
 					if err != nil {
-						fmt.Printf("Failed to find canonical URL for page %v: %v\n", parsed.String(), err)
+						slogctx.Error(ctx, "Failed to find canonical URL for page", "sourceId", src.ID, "url", parsed.String(), "error", err)
 						continue
 					}
 					err = db.AddToQueue(context.Background(), src.ID, canonical.String(), []string{canonical.String()}, 0, false)
 					if err != nil {
-						fmt.Printf("Failed to add page %v to queue: %v\n", src.URL, err)
+						slogctx.Error(ctx, "Failed to add page to queue", "sourceId", src.ID, "url", src.URL, err)
 					}
 				}
 			}

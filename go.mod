@@ -15,6 +15,7 @@ require (
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/oxffaa/gopher-parse-sitemap v0.0.0-20191021113419-005d2eb1def4
 	github.com/pkoukk/tiktoken-go-loader v0.0.1
+	github.com/veqryn/slog-context v0.7.0
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
 	golang.org/x/net v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -22,6 +23,7 @@ require (
 
 require (
 	github.com/dlclark/regexp2 v1.11.4 // indirect
+	github.com/go-logr/logr v1.4.1 // indirect
 	gitlab.com/golang-commonmark/html v0.0.0-20191124015941-a22733972181 // indirect
 	gitlab.com/golang-commonmark/linkify v0.0.0-20200225224916-64bca66f6ad3 // indirect
 	gitlab.com/golang-commonmark/markdown v0.0.0-20211110145824-bf3e522c626a // indirect

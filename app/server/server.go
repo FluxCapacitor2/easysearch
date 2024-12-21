@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 	"github.com/fluxcapacitor2/easysearch/app/config"
 	"github.com/fluxcapacitor2/easysearch/app/database"
 	"github.com/fluxcapacitor2/easysearch/app/embedding"
+	slogctx "github.com/veqryn/slog-context"
 )
 
 //go:embed templates static
@@ -86,7 +88,7 @@ func Start(db database.Database, cfg *config.Config) {
 					Error:   "Internal server error",
 				}
 
-				fmt.Printf("Error generating search results: %v\n", err)
+				slogctx.Error(req.Context(), "Failed to generate search results", "error", err)
 			} else {
 				response = httpResponse{
 					status:  200,
@@ -168,9 +170,10 @@ func Start(db database.Database, cfg *config.Config) {
 
 		for _, s := range foundSources {
 			if s.Embeddings.Enabled && queryEmbeds[s.Embeddings.Model] == nil {
-				vector, err := embedding.GetEmbeddings(s.Embeddings.OpenAIBaseURL, s.Embeddings.Model, s.Embeddings.APIKey, []string{q})
+				vector, err := embedding.GetEmbeddings(req.Context(), s.Embeddings.OpenAIBaseURL, s.Embeddings.Model, s.Embeddings.APIKey, []string{q})
 				if err != nil {
-					fmt.Printf("Error getting embeddings for search query: %v\n", err)
+					slogctx.Error(req.Context(), "Failed to generate embeddings for query", "error", err)
+
 					respond(httpResponse{
 						status:  500,
 						Success: false,
@@ -187,7 +190,8 @@ func Start(db database.Database, cfg *config.Config) {
 		for _, s := range foundSources {
 			results, err := db.SimilaritySearch(req.Context(), s.ID, queryEmbeds[s.Embeddings.Model], 10)
 			if err != nil {
-				fmt.Printf("Error generating search results: %v\n", err)
+				slogctx.Error(req.Context(), "Failed to generate search results", "error", err)
+
 				respond(httpResponse{
 					status:  500,
 					Success: false,
@@ -259,9 +263,10 @@ func Start(db database.Database, cfg *config.Config) {
 
 		for _, s := range foundSources {
 			if s.Embeddings.Enabled && queryEmbeds[s.Embeddings.Model] == nil {
-				vector, err := embedding.GetEmbeddings(s.Embeddings.OpenAIBaseURL, s.Embeddings.Model, s.Embeddings.APIKey, []string{q})
+				vector, err := embedding.GetEmbeddings(req.Context(), s.Embeddings.OpenAIBaseURL, s.Embeddings.Model, s.Embeddings.APIKey, []string{q})
 				if err != nil {
-					fmt.Printf("Error getting embeddings for search query: %v\n", err)
+					slogctx.Error(req.Context(), "Failed to generate embeddings for search query", "error", err)
+
 					respond(httpResponse{
 						status:  500,
 						Success: false,
@@ -297,7 +302,8 @@ func Start(db database.Database, cfg *config.Config) {
 
 		results, err := db.HybridSearch(req.Context(), sourceList, q, embeddedQueries, 10)
 		if err != nil {
-			fmt.Printf("Error generating search results: %v\n", err)
+			slogctx.Error(req.Context(), "Failed to generate search results", "error", err)
+
 			respond(httpResponse{
 				status:  500,
 				Success: false,
@@ -314,7 +320,7 @@ func Start(db database.Database, cfg *config.Config) {
 	})
 
 	addr := fmt.Sprintf("%v:%v", cfg.HTTP.Listen, cfg.HTTP.Port)
-	fmt.Printf("Listening on http://%v\n", addr)
+	slog.Info("HTTP server is listening", "address", "http://"+addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
@@ -364,7 +370,7 @@ func renderTemplateWithResults(db database.Database, config *config.Config, req 
 		totalTime = end - start
 
 		if err != nil || total == nil {
-			fmt.Printf("Error fetching results while serving results template: %v\n", err)
+			slogctx.Error(req.Context(), "Error fetching results while serving results template", "error", err)
 			w.WriteHeader(500)
 			w.Write([]byte("Internal server error"))
 			return

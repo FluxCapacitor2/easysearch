@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"slices"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/fluxcapacitor2/easysearch/app/database"
 	"github.com/fluxcapacitor2/easysearch/app/embedding"
 	"github.com/go-co-op/gocron/v2"
+	slogctx "github.com/veqryn/slog-context"
 )
 
 func startQueueJob(db database.Database, config *config.Config) {
@@ -31,7 +33,7 @@ func startQueueJob(db database.Database, config *config.Config) {
 			defer cancel()
 			processCrawlQueue(ctx, db, src)
 		})); err != nil {
-			fmt.Printf("Error creating crawl job: %v", err)
+			slog.Error("Failed to create crawl job", "error", err)
 		}
 	}
 
@@ -42,40 +44,45 @@ func startQueueJob(db database.Database, config *config.Config) {
 		interval := 60.0 / float64(src.Embeddings.Speed)
 
 		if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(interval*float64(time.Second))), gocron.NewTask(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			ctx = slogctx.Append(ctx, "sourceId", src.ID)
 
 			if src.Embeddings.Enabled {
-				err = db.StartEmbeddings(context.Background(), src.ID, src.Embeddings.ChunkSize, src.Embeddings.ChunkOverlap)
+				err = db.StartEmbeddings(ctx, src.ID, src.Embeddings.ChunkSize, src.Embeddings.ChunkOverlap)
 				if err != nil {
-					fmt.Printf("Error queueing pages that need embeddings: %v\n", err)
+					slog.Error("Failed to queue pages that need embeddings", "error", err)
 				}
 			}
 
-			processEmbedQueue(db, src)
+			processEmbedQueue(ctx, db, src)
 		})); err != nil {
-			fmt.Printf("Error creating embedding job: %v", err)
+			slog.Error("Failed to create embedding job", "error", err)
 		}
 	}
 
 	if err := db.Cleanup(context.Background()); err != nil {
-		fmt.Printf("error running Cleanup on startup: %v\n", err)
+		slog.Error("Failed to run Cleanup", "error", err)
 	}
 
 	if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(5*time.Minute)), gocron.NewTask(func() {
-		err := db.Cleanup(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err := db.Cleanup(ctx)
 		if err != nil {
-			fmt.Printf("Error cleaning queue: %v\n", err)
+			slogctx.Error(ctx, "Failed to run Cleanup", "error", err)
 		}
 	})); err != nil {
-		fmt.Printf("Failed to create cleanup job: %v\n", err)
+		slog.Error("Failed to create cleanup job", "error", err)
 	}
 
 	scheduler.Start()
 }
 
-func processEmbedQueue(db database.Database, src config.Source) {
-	items, err := db.PopEmbedQueue(context.Background(), src.Embeddings.BatchSize, src.ID)
+func processEmbedQueue(ctx context.Context, db database.Database, src config.Source) {
+	items, err := db.PopEmbedQueue(ctx, src.Embeddings.BatchSize, src.ID)
 	if err != nil {
-		fmt.Printf("Failed to get next item in embed queue: %v\n", err)
+		slogctx.Error(ctx, "Failed to get next item in embed queue", "error", err)
 	}
 	if len(items) == 0 {
 		// The queue is empty
@@ -83,9 +90,9 @@ func processEmbedQueue(db database.Database, src config.Source) {
 	}
 
 	markFailure := func(id int64) {
-		err := db.UpdateEmbedQueueEntry(context.Background(), id, database.Error)
+		err := db.UpdateEmbedQueueEntry(ctx, id, database.Error)
 		if err != nil {
-			fmt.Printf("failed to mark embedding queue item as Error: %v\n", err)
+			slogctx.Error(ctx, "Failed to mark embedding queue item as Error", "error", err)
 		}
 	}
 
@@ -95,9 +102,9 @@ func processEmbedQueue(db database.Database, src config.Source) {
 		content = append(content, item.Content)
 	}
 
-	vectors, err := embedding.GetEmbeddings(src.Embeddings.OpenAIBaseURL, src.Embeddings.Model, src.Embeddings.APIKey, content)
+	vectors, err := embedding.GetEmbeddings(ctx, src.Embeddings.OpenAIBaseURL, src.Embeddings.Model, src.Embeddings.APIKey, content)
 	if err != nil {
-		fmt.Printf("error getting embeddings: %v\n", err)
+		slogctx.Error(ctx, "Failed to generate embeddings", "error", err)
 		for _, item := range items {
 			markFailure(item.ID)
 		}
@@ -105,50 +112,56 @@ func processEmbedQueue(db database.Database, src config.Source) {
 	}
 
 	for i, item := range items {
-		err = db.AddEmbedding(context.Background(), item.PageID, src.ID, item.ChunkIndex, item.Content, vectors[i])
+		err = db.AddEmbedding(ctx, item.PageID, src.ID, item.ChunkIndex, item.Content, vectors[i])
 		if err != nil {
-			fmt.Printf("error saving embedding: %v\n", err)
+			slogctx.Error(ctx, "Failed to save embedding", "error", err)
 			markFailure(item.ID)
 			return
 		}
 
-		err = db.UpdateEmbedQueueEntry(context.Background(), item.ID, database.Finished)
+		err = db.UpdateEmbedQueueEntry(ctx, item.ID, database.Finished)
 		if err != nil {
-			fmt.Printf("failed to mark embedding queue item as Finished: %v\n", err)
+			slogctx.Error(ctx, "Failed to mark embedding queue item as Finished", "error", err)
 		}
 	}
 }
 
 func processCrawlQueue(ctx context.Context, db database.Database, src config.Source) {
 	// Pop the oldest item off the queue and crawl it.
-	item, err := db.PopQueue(context.Background(), src.ID)
+	item, err := db.PopQueue(ctx, src.ID)
 	if err != nil {
-		fmt.Printf("Failed to get next item in crawl queue: %v\n", err)
+		slogctx.Error(ctx, "Failed to get next item in crawl queue", "error", err)
 	}
 	if item == nil {
 		// The queue is empty
 		return
+	} else {
+		ctx = slogctx.With(ctx, "sourceId", src.ID)
 	}
 
 	// The `item` is nil when there are no items in the queue
 	result, err := crawler.Crawl(ctx, src, item.Depth, item.Referrers, db, item.URL)
 
+	if result != nil {
+		ctx = slogctx.With(ctx, "original", item.URL, "canonical", result.Canonical, "pageId", result.PageID)
+	}
+
 	if err != nil {
 		// Mark the queue entry as errored
-		fmt.Printf("Error crawling URL %v from source %v: %v\n", item.URL, src.ID, err)
+		slogctx.Error(ctx, "Failed to crawl URL", "error", err)
 		{
-			err := db.UpdateQueueEntry(context.Background(), item.ID, database.Error)
+			err := db.UpdateQueueEntry(ctx, item.ID, database.Error)
 			if err != nil {
-				fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.URL, database.Error, err)
+				slogctx.Error(ctx, "Failed to update queue item status to Error", "error", err)
 			}
 		}
 
 		// Add an entry to the pages table to prevent immediately recrawling the same URL when referred from other sources.
 		// Additionally, if refresh is enabled, another crawl attempt will be made after the refresh interval passes.
 		if result != nil {
-			_, err := db.AddDocument(context.Background(), src.ID, item.Depth, item.Referrers, result.Canonical, database.Error, "", "", "", err.Error())
+			_, err := db.AddDocument(ctx, src.ID, item.Depth, item.Referrers, result.Canonical, database.Error, "", "", "", err.Error())
 			if err != nil {
-				fmt.Printf("Failed to add page in 'error' state: %v\n", err)
+				slogctx.Error(ctx, "Failed to add placeholder page in Error state", "error", err)
 			}
 		}
 
@@ -158,7 +171,7 @@ func processCrawlQueue(ctx context.Context, db database.Database, src config.Sou
 			chunks, err := embedding.ChunkText(result.Content.Content, src.Embeddings.ChunkSize, src.Embeddings.ChunkOverlap)
 
 			if err != nil {
-				fmt.Printf("error chunking page: %v\n", err)
+				slogctx.Error(ctx, "Failed to split page into chunks for embedding", "error", err)
 			}
 
 			// Filter out empty chunks
@@ -169,36 +182,36 @@ func processCrawlQueue(ctx context.Context, db database.Database, src config.Sou
 				}
 			}
 
-			err = db.AddToEmbedQueue(context.Background(), result.PageID, filtered)
+			err = db.AddToEmbedQueue(ctx, result.PageID, filtered)
 
 			if err != nil {
-				fmt.Printf("error adding page chunks to embed queue: %v\n", err)
+				slogctx.Error(ctx, "Failed to add page chunks to embed queue", "error", err)
 			}
 		}
 
 		// If the crawl completed successfully, mark the item as finished
-		err = db.UpdateQueueEntry(context.Background(), item.ID, database.Finished)
+		err = db.UpdateQueueEntry(ctx, item.ID, database.Finished)
 		if err != nil {
-			fmt.Printf("Failed to update queue item status for page %v to %v: %v\n", item.URL, database.Finished, err)
+			slogctx.Error(ctx, "Failed to update queue item status to Finished", "error", err)
 		}
 	}
 
 	// Remove existing references and then populate new ones
-	err = db.RemoveAllReferences(context.Background(), result.PageID)
+	err = db.RemoveAllReferences(ctx, result.PageID)
 	if err != nil {
-		fmt.Printf("Error removing references: %v\n", err)
+		slogctx.Error(ctx, "Failed to remove old references", "error", err)
 	}
 
 	// Record existing pages that this page refers to
 	filtered := filterURLs(db, src, result.URLs, false)
 	for _, url := range filtered {
-		doc, err := db.GetDocument(context.Background(), src.ID, url)
+		doc, err := db.GetDocument(ctx, src.ID, url)
 		if err != nil || doc == nil {
 			continue
 		}
-		err = db.AddReferrer(context.Background(), result.PageID, doc.ID)
+		err = db.AddReferrer(ctx, result.PageID, doc.ID)
 		if err != nil {
-			fmt.Printf("Error recording referrer: %v\n", err)
+			slogctx.Error(ctx, "Failed to record referrer", "error", err)
 		}
 	}
 
@@ -208,9 +221,9 @@ func processCrawlQueue(ctx context.Context, db database.Database, src config.Sou
 
 	// Add URLs found in the crawl to the queue
 	filtered = filterURLs(db, src, result.URLs, true)
-	err = db.AddToQueue(context.Background(), src.ID, result.Canonical, filtered, item.Depth+1, false)
+	err = db.AddToQueue(ctx, src.ID, result.Canonical, filtered, item.Depth+1, false)
 	if err != nil {
-		fmt.Printf("Error adding URLs to queue: %v\n", err)
+		slogctx.Error(ctx, "Failed to add URLs to queue", "error", err)
 	}
 }
 
@@ -220,7 +233,7 @@ func filterURLs(db database.Database, src config.Source, urls []string, newOnly 
 	for _, fullURL := range urls {
 		res, err := url.Parse(fullURL)
 		if err != nil {
-			fmt.Printf("%v\n", err)
+			continue
 		} else {
 
 			if newOnly {
