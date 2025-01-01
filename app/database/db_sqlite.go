@@ -829,6 +829,14 @@ func (db *SQLiteDatabase) CreateSpellfixIndex(ctx context.Context) error {
 	return err
 }
 
+func (db *SQLiteDatabase) DropSpellfixIndex(ctx context.Context) error {
+	_, err := db.conn.ExecContext(ctx, `
+		DROP TABLE IF EXISTS tmp_fts_vocab;
+		DROP TABLE IF EXISTS spellfix;
+	`)
+	return err
+}
+
 func (db *SQLiteDatabase) Spellfix(ctx context.Context, query string) (string, error) {
 	// Split the query into individual words
 	words := re.Split(query, -1)

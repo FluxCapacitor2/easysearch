@@ -65,6 +65,8 @@ type Database interface {
 
 	// Use vocabulary from the search corpus to set up spelling correction
 	CreateSpellfixIndex(ctx context.Context) error
+	// Remove any created indexes for spell checking to free up disk space
+	DropSpellfixIndex(ctx context.Context) error
 
 	// Attempt to fix spelling errors using a dictionary
 	Spellfix(ctx context.Context, query string) (string, error)
