@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"time"
 
 	"github.com/fluxcapacitor2/easysearch/app/config"
 	"github.com/fluxcapacitor2/easysearch/app/crawler"
@@ -51,6 +52,15 @@ func main() {
 
 		if err != nil {
 			panic(fmt.Sprintf("Failed to set up database: %v", err))
+		}
+
+		start := time.Now()
+		err = db.CreateSpellfixIndex(context.Background())
+
+		if err != nil {
+			slog.Warn("Failed to create spellfix index", "error", err)
+		} else {
+			slog.Info("Created spellfix index", "time", fmt.Sprintf("%dms", time.Since(start).Milliseconds()))
 		}
 
 		for _, src := range config.Sources {

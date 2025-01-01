@@ -33,20 +33,7 @@ var embedSetupCommands string
 
 func (db *SQLiteDatabase) Setup(ctx context.Context) error {
 	_, err := db.conn.ExecContext(ctx, setupCommands)
-
-	if err != nil {
-		return err
-	}
-
-	row := db.conn.QueryRowContext(ctx, "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='spellfix';")
-	var unused int
-	err = row.Scan(&unused)
-	if err == sql.ErrNoRows {
-		err := db.CreateSpellfixIndex(ctx)
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (db *SQLiteDatabase) SetupVectorTables(ctx context.Context, sourceID string, dimensions int) error {
