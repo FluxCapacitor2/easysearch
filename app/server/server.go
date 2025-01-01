@@ -380,7 +380,15 @@ func renderTemplateWithResults(db database.Database, config *config.Config, req 
 	if len(src) > 0 && len(q) > 0 && err == nil {
 		var err error
 		start := time.Now().UnixMicro()
-		results, total, err = db.Search(req.Context(), src, q, uint32(page), 10)
+
+		spellchecked, err := db.Spellfix(req.Context(), q)
+		if err != nil {
+			slogctx.Error(req.Context(), "Error correcting query spelling", "error", err)
+			w.WriteHeader(500)
+			w.Write([]byte("Internal server error"))
+			return
+		}
+		results, total, err = db.Search(req.Context(), src, spellchecked, uint32(page), 10)
 		end := time.Now().UnixMicro()
 
 		totalTime = end - start
