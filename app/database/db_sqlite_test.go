@@ -8,10 +8,12 @@ import (
 	"time"
 
 	vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
+	"github.com/fluxcapacitor2/easysearch/app/spellfix"
 )
 
 func createDB(t *testing.T) Database {
 	vec.Auto()
+	spellfix.Auto()
 	db, err := SQLiteFromFile(path.Join(t.TempDir(), "temp.db"))
 
 	if err != nil {
@@ -301,5 +303,28 @@ func TestQueuePagesOlderThan(t *testing.T) {
 	}
 	if doc != nil {
 		t.Fatalf("more than one page was queued; expected exactly 1 page in the queue")
+	}
+}
+
+func TestSpellfix(t *testing.T) {
+	db := createDB(t)
+
+	_, err := db.AddDocument(context.Background(), "source", 1, []int64{}, "", Finished, "The quick brown fox jumped over the lazy dog", "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error adding document: %v", err)
+	}
+
+	err = db.CreateSpellfixIndex(context.Background())
+	if err != nil {
+		t.Fatalf("failed to create spellfix index: %v\n", err)
+	}
+
+	str, err := db.Spellfix(context.Background(), "Thg quicg browg fog jumpeg oveg thg lazg dog")
+	if err != nil {
+		t.Fatalf("error during spellfix: %v\n", err)
+	}
+
+	if str != "quick brown fox jumped lazy dog" {
+		t.Fatalf("unexpected spellfix return: expected 'quick brown fox jumped lazy dog', got '%v'\n", str)
 	}
 }

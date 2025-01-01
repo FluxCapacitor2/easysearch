@@ -64,7 +64,7 @@ func main() {
 	}
 
 	// Continuously pop items off each source's queue and crawl them
-	go startQueueJob(db, config)
+	go scheduleJobs(db, config)
 
 	// If the base page for a source hasn't been crawled yet, queue it
 	go startCrawl(context.Background(), db, config)

@@ -17,7 +17,7 @@ import (
 	slogctx "github.com/veqryn/slog-context"
 )
 
-func startQueueJob(db database.Database, config *config.Config) {
+func scheduleJobs(db database.Database, config *config.Config) {
 
 	scheduler, err := gocron.NewScheduler()
 
@@ -74,6 +74,17 @@ func startQueueJob(db database.Database, config *config.Config) {
 		}
 	})); err != nil {
 		slog.Error("Failed to create cleanup job", "error", err)
+	}
+
+	if _, err := scheduler.NewJob(gocron.DurationJob(time.Duration(5*time.Minute)), gocron.NewTask(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		err := db.CreateSpellfixIndex(ctx)
+		if err != nil {
+			slogctx.Error(ctx, "Failed to build spellfix index", "error", err)
+		}
+	})); err != nil {
+		slog.Error("Failed to create spellfix index build job", "error", err)
 	}
 
 	scheduler.Start()

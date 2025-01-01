@@ -73,50 +73,60 @@ func Start(db database.Database, cfg *config.Config) {
 		}
 
 		timeStart := time.Now().UnixMicro()
-		var response httpResponse
+
+		respond := func(response httpResponse) {
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(int(response.status))
+			response.ResponseTime = float64(time.Now().UnixMicro()-timeStart) / 1e6
+			str, err := json.Marshal(response)
+			if err != nil {
+				w.Write([]byte(`{"success":"false","error":"Failed to marshal struct into JSON"}`))
+			} else {
+				w.Write([]byte(str))
+			}
+		}
 
 		src := req.URL.Query()["source"]
 		q := req.URL.Query().Get("q")
 		page, err := strconv.ParseUint(req.URL.Query().Get("page"), 10, 32)
 
-		if q != "" && src != nil && len(src) > 0 && err == nil {
-			results, total, err := db.Search(req.Context(), src, q, uint32(page), 10)
-			if err != nil {
-				response = httpResponse{
-					status:  500,
-					Success: false,
-					Error:   "Internal server error",
-				}
-
-				slogctx.Error(req.Context(), "Failed to generate search results", "error", err)
-			} else {
-				response = httpResponse{
-					status:  200,
-					Success: true,
-					Results: results,
-					Pagination: paginationInfo{
-						Page:     uint32(page),
-						PageSize: 10,
-						Total:    *total,
-					},
-				}
-			}
-		} else {
-			response = httpResponse{
+		if q == "" || src == nil || len(src) == 0 || err != nil {
+			respond(httpResponse{
 				status:  400,
 				Success: false,
 				Error:   "Bad request",
-			}
+			})
+			return
 		}
 
-		w.Header().Add("Content-Type", "application/json")
-		w.WriteHeader(int(response.status))
-		response.ResponseTime = float64(time.Now().UnixMicro()-timeStart) / 1e6
-		str, err := json.Marshal(response)
+		spellchecked, err := db.Spellfix(req.Context(), q)
 		if err != nil {
-			w.Write([]byte(`{"success":"false","error":"Failed to marshal struct into JSON"}`))
+			slogctx.Error(req.Context(), "Failed to spellcheck query", "error", err)
+			spellchecked = q
+		}
+
+		results, total, err := db.Search(req.Context(), src, spellchecked, uint32(page), 10)
+		if err != nil {
+			respond(httpResponse{
+				status:  500,
+				Success: false,
+				Error:   "Internal server error",
+			})
+
+			slogctx.Error(req.Context(), "Failed to generate search results", "error", err)
+			return
 		} else {
-			w.Write([]byte(str))
+			respond(httpResponse{
+				status:  200,
+				Success: true,
+				Results: results,
+				Pagination: paginationInfo{
+					Page:     uint32(page),
+					PageSize: 10,
+					Total:    *total,
+				},
+			})
+			return
 		}
 	})
 
@@ -300,7 +310,13 @@ func Start(db database.Database, cfg *config.Config) {
 			return
 		}
 
-		results, err := db.HybridSearch(req.Context(), sourceList, q, embeddedQueries, 10)
+		spellchecked, err := db.Spellfix(req.Context(), q)
+		if err != nil {
+			slogctx.Error(req.Context(), "Failed to spellcheck query", "error", err)
+			spellchecked = q
+		}
+
+		results, err := db.HybridSearch(req.Context(), sourceList, spellchecked, embeddedQueries, 10)
 		if err != nil {
 			slogctx.Error(req.Context(), "Failed to generate search results", "error", err)
 

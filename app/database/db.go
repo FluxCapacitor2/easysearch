@@ -62,6 +62,12 @@ type Database interface {
 
 	SimilaritySearch(ctx context.Context, sourceID string, query []float32, limit int) ([]SimilarityResult, error)
 	HybridSearch(ctx context.Context, sources []string, queryString string, embeddedQueries map[string][]float32, limit int) ([]HybridResult, error)
+
+	// Use vocabulary from the search corpus to set up spelling correction
+	CreateSpellfixIndex(ctx context.Context) error
+
+	// Attempt to fix spelling errors using a dictionary
+	Spellfix(ctx context.Context, query string) (string, error)
 }
 
 type Page struct {

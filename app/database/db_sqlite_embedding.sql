@@ -1,8 +1,9 @@
 -- This script creates the embedding tables for one source.
 
 -- Required format string placeholders:
--- (Repeated 4 times) source ID (string)
--- vector size (integer)
+-- 1) source ID (string)
+-- 2) vector size (integer)
+-- 3-6) (Repeated 4 times) source ID (string)
 
 -- Why use separate tables for each source?
 -- * Faster query times when there are many sources with lots of embeddings that aren't included in the user's query

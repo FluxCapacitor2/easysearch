@@ -13,6 +13,7 @@ import (
 
 	vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/fluxcapacitor2/easysearch/app/embedding"
+	"github.com/fluxcapacitor2/easysearch/app/spellfix"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -32,7 +33,20 @@ var embedSetupCommands string
 
 func (db *SQLiteDatabase) Setup(ctx context.Context) error {
 	_, err := db.conn.ExecContext(ctx, setupCommands)
-	return err
+
+	if err != nil {
+		return err
+	}
+
+	row := db.conn.QueryRowContext(ctx, "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='spellfix';")
+	var unused int
+	err = row.Scan(&unused)
+	if err == sql.ErrNoRows {
+		err := db.CreateSpellfixIndex(ctx)
+		return err
+	}
+
+	return nil
 }
 
 func (db *SQLiteDatabase) SetupVectorTables(ctx context.Context, sourceID string, dimensions int) error {
@@ -816,6 +830,41 @@ func (db *SQLiteDatabase) StartEmbeddings(ctx context.Context, source string, ch
 	return nil
 }
 
+func (db *SQLiteDatabase) CreateSpellfixIndex(ctx context.Context) error {
+	_, err := db.conn.ExecContext(ctx, `
+		DROP TABLE IF EXISTS tmp_fts_vocab;
+		DROP TABLE IF EXISTS spellfix;
+		CREATE VIRTUAL TABLE tmp_fts_vocab USING fts5vocab('pages_fts', 'row');
+		CREATE VIRTUAL TABLE spellfix USING spellfix1;
+		INSERT INTO spellfix(word, rank) SELECT term, doc FROM tmp_fts_vocab;
+		DROP TABLE tmp_fts_vocab;
+	`)
+	return err
+}
+
+func (db *SQLiteDatabase) Spellfix(ctx context.Context, query string) (string, error) {
+	// Split the query into individual words
+	words := re.Split(query, -1)
+	checked := make([]string, 0, len(words))
+	for _, word := range words {
+		trimmed := strings.TrimSpace(word)
+		if len(trimmed) == 0 {
+			continue
+		}
+		var res string
+		row := db.conn.QueryRowContext(ctx, "SELECT word FROM spellfix WHERE word MATCH ? AND top=1;", trimmed)
+		err := row.Scan(&res)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue
+			}
+			return "", err
+		}
+		checked = append(checked, res)
+	}
+	return strings.Join(checked, " "), nil
+}
+
 func (db *SQLiteDatabase) QueuePagesOlderThan(ctx context.Context, source string, daysAgo int32) error {
 	rows, err := db.conn.QueryContext(ctx, "SELECT source, url, crawledAt, depth, status FROM pages WHERE url NOT IN (SELECT url FROM crawl_queue) AND source = ? AND unixepoch() - unixepoch(crawledAt) > ?", source, daysAgo*86400)
 
@@ -865,7 +914,9 @@ func (db *SQLiteDatabase) SetCanonical(ctx context.Context, source string, url s
 }
 
 func SQLiteFromFile(fileName string) (*SQLiteDatabase, error) {
-	vec.Auto() // Load the `sqlite-vec` extension
+	vec.Auto()      // Load the `sqlite-vec` extension
+	spellfix.Auto() // Load the `spellfix1` extension for spelling correction
+
 	conn, err := sql.Open("sqlite3", fileName)
 
 	if err != nil {

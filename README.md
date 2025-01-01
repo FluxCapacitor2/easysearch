@@ -7,6 +7,7 @@ A simple way to add search to your website, featuring:
 - Sitemap scanning
 - An API for search results
 - Multi-tenancy
+- Spelling error correction
 - Vector similarity search, allowing search by semantic meaning instead of exact matches ([what is this?](https://www.ibm.com/topics/vector-search))
 - A prebuilt search page that works without JavaScript (with [progressive enhancement](https://developer.mozilla.org/en-US/docs/Glossary/Progressive_Enhancement) for users with JS enabled)
 

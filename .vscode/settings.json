@@ -5,5 +5,6 @@
   },
   "files.associations": {
     "*.html.tmpl": "gohtml"
-  }
+  },
+  "go.buildTags": "fts5"
 }
