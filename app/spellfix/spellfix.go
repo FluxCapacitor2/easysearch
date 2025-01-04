@@ -6,7 +6,8 @@ package spellfix
 
 // #cgo CFLAGS: -DSQLITE_CORE
 // #cgo linux LDFLAGS: -lm
-// #include "spellfix.h"
+// #include "vendor/spellfix.c"
+// #include "vendor/spellfix.h"
 //
 import "C"
 
