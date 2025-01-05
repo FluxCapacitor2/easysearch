@@ -851,6 +851,7 @@ func (db *SQLiteDatabase) Spellfix(ctx context.Context, query string) (string, e
 		err := row.Scan(&res)
 		if err != nil {
 			if err == sql.ErrNoRows {
+				checked = append(checked, trimmed)
 				continue
 			}
 			return "", err
