@@ -319,12 +319,12 @@ func TestSpellfix(t *testing.T) {
 		t.Fatalf("failed to create spellfix index: %v\n", err)
 	}
 
-	str, err := db.Spellfix(context.Background(), "Thg quicg browg fog jumpeg oveg thg lazg dog")
+	str, err := db.Spellfix(context.Background(), "The quicg browg fog jumpeg ovrr the lazg dog")
 	if err != nil {
 		t.Fatalf("error during spellfix: %v\n", err)
 	}
 
-	if str != "quick brown fox jumped lazy dog" {
-		t.Fatalf("unexpected spellfix return: expected 'quick brown fox jumped lazy dog', got '%v'\n", str)
+	if str != "the quick brown fox jumped over the lazy dog" {
+		t.Fatalf("unexpected spellfix return: expected 'the quick brown fox jumped over the lazy dog', got '%v'\n", str)
 	}
 }
