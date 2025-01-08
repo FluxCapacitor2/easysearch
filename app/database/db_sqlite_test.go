@@ -328,3 +328,33 @@ func TestSpellfix(t *testing.T) {
 		t.Fatalf("unexpected spellfix return: expected 'the quick brown fox jumped over the lazy dog', got '%v'\n", str)
 	}
 }
+
+// When a document is added, if one already exists with the same source and URL, the existing page should be updated instead of creating a new row.
+// However, if the ID changes and the page's referrer was set to itself, then the page's referrers will fail to be recorded.
+// This test makes sure that doesn't happen.
+func TestAddDocumentUpdateRow(t *testing.T) {
+	db := createDB(t)
+
+	oldPageID, err := db.AddDocument(context.Background(), "source", 1, []int64{}, "http://url.test", Finished, "The quick brown fox jumped over the lazy dog", "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error adding document: %v", err)
+	}
+
+	newPageID, err := db.AddDocument(context.Background(), "source", 1, []int64{oldPageID}, "http://url.test", Finished, "New page content", "New description", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error adding second document: %v", err)
+	}
+
+	page, err := db.GetDocumentByID(context.Background(), newPageID)
+	if err != nil {
+		t.Fatalf("failed to get document by id: %v\n", err)
+	}
+
+	if page.Title != "New page content" {
+		t.Fatalf("unexpected page title: '%v' != '%v'", page.Title, "New page content")
+	}
+
+	if page.Description != "New description" {
+		t.Fatalf("unexpected page title: '%v' != '%v'", page.Title, "New description")
+	}
+}
