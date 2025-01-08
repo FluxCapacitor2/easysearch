@@ -682,7 +682,7 @@ func (db *SQLiteDatabase) PopEmbedQueue(ctx context.Context, limit int, source s
 	// Find the first item in the queue and update it in one step. If the row isn't returned, another process must have updated it at the same time.
 	rows, err := db.conn.QueryContext(ctx, `
 	  UPDATE embed_queue SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id IN (
-	    SELECT embed_queue.id FROM embed_queue JOIN pages ON embed_queue.page = pages.id WHERE embed_queue.status = ? AND pages.source = ? ORDER BY embed_queue.addedAt LIMIT ?
+	    SELECT embed_queue.id FROM embed_queue JOIN pages ON embed_queue.page = pages.id WHERE embed_queue.status = ? AND pages.source = ? ORDER BY embed_queue.page, embed_queue.chunkIndex LIMIT ?
 	  ) RETURNING id, status, page, chunkIndex, chunk;
 	`, Processing, Pending, source, limit)
 
@@ -728,7 +728,13 @@ func (db *SQLiteDatabase) AddEmbedding(ctx context.Context, pageID int64, source
 	}
 
 	id := int64(-1)
-	err = tx.QueryRowContext(ctx, "INSERT INTO vec_chunks (page, chunkIndex, chunk) VALUES (?, ?, ?) RETURNING id;", pageID, chunkIndex, chunk).Scan(&id)
+	err = tx.QueryRowContext(ctx, `
+	-- Delete leftover chunks that may exist from previous embedding jobs.
+	-- This statement only works because we pop elements from the embed queue in ascending order by chunkIndex.
+	DELETE FROM vec_chunks WHERE page = ? AND chunkIndex >= ?;
+	REPLACE INTO vec_chunks (page, chunkIndex, chunk) VALUES (?, ?, ?) RETURNING id;
+	`, pageID, chunkIndex, pageID, chunkIndex, chunk).Scan(&id)
+
 	if err != nil {
 		if err := tx.Rollback(); err != nil {
 			return err

@@ -125,7 +125,7 @@ func processEmbedQueue(ctx context.Context, db database.Database, src config.Sou
 	for i, item := range items {
 		err = db.AddEmbedding(ctx, item.PageID, src.ID, item.ChunkIndex, item.Content, vectors[i])
 		if err != nil {
-			slogctx.Error(ctx, "Failed to save embedding", "error", err)
+			slogctx.Error(ctx, "Failed to save embedding", "error", err, "page", item.PageID, "chunkIndex", item.ChunkIndex)
 			markFailure(item.ID)
 			return
 		}
