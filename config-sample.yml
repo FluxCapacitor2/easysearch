@@ -3,7 +3,7 @@
 
 db:
   driver: sqlite
-  connectionString: "./data.db" # Set this to ":memory:" to avoid creating a file
+  connectionString: "./data.db?_txlock=immediate" # Set this to ":memory:" to avoid creating a file
 
 http:
   listen: localhost
