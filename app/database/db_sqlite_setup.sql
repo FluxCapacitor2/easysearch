@@ -119,7 +119,7 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS pages_auto_update AFTER UPDATE ON pages BEGIN
   INSERT INTO pages_fts(pages_fts, rowid, url, title, description, content) VALUES('delete', old.rowid, old.url, old.title, old.description, old.content);
-  INSERT INTO pages_fts(rowid, url, title, description, content) VALUES (new.url, new.title, new.description, new.content);
+  INSERT INTO pages_fts(rowid, url, title, description, content) VALUES (new.rowid, new.url, new.title, new.description, new.content);
   -- Remove crawl queue entry if it exists
   DELETE FROM crawl_queue WHERE source = new.source AND url = new.url;
 END;

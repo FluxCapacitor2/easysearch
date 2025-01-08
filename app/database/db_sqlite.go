@@ -60,16 +60,12 @@ func (db *SQLiteDatabase) AddDocument(ctx context.Context, source string, depth 
 		return id, err
 	}
 
-	oldID := int64(-1)
-	err = tx.QueryRowContext(ctx, "SELECT id FROM pages WHERE source = ? AND url = ?;", source, url).Scan(&oldID)
-	if err != nil && err != sql.ErrNoRows {
-		if err := tx.Rollback(); err != nil {
-			return id, err
-		}
-		return id, err
-	}
-
-	err = tx.QueryRowContext(ctx, "REPLACE INTO pages (source, depth, status, url, title, description, content, errorInfo) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING (id);", source, depth, status, url, title, description, content, errorInfo).Scan(&id)
+	err = tx.QueryRowContext(ctx, `
+	INSERT INTO pages (source, depth, status, url, title, description, content, errorInfo)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT DO UPDATE SET depth = min(depth, excluded.depth), status = excluded.status, title = excluded.title, description = excluded.description, content = excluded.content, errorInfo = excluded.errorInfo, crawledAt = CURRENT_TIMESTAMP
+	RETURNING id;
+	`, source, depth, status, url, title, description, content, errorInfo).Scan(&id)
 	if err != nil {
 		if err := tx.Rollback(); err != nil {
 			return id, err
@@ -78,18 +74,6 @@ func (db *SQLiteDatabase) AddDocument(ctx context.Context, source string, depth 
 	}
 
 	for _, ref := range referrers {
-		if oldID != -1 && id != oldID && ref == oldID {
-			// Special case: within the transaction, if the REPLACE INTO replaces an existing row,
-			// it's possible that one of the referrers now points to a page that no longer exists.
-			// If this happens, we should just ignore it because pages shouldn't point to themselves anyways.
-
-			// 2025/01/08: I tried for ~3 hours to just use a normal UPSERT-style statement to avoid the extra SELECT:
-			// "INSERT INTO pages ... ON CONFLICT DO UPDATE SET ...", but I kept getting errors like "4 values for 5 columns"
-			// and "sub-select returns 4 columns - expected 1" even though I'm not doing any sub-selects and every sub-select
-			// in a trigger uses the correct number of columns (and even for regular UPDATE statements too!).
-			// I've decided to give up for now. :/
-			continue
-		}
 		if ref == id {
 			// Pages don't need to reference themselves
 			continue
