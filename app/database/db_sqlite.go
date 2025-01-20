@@ -5,7 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -409,7 +411,7 @@ func (db *SQLiteDatabase) SimilaritySearch(ctx context.Context, sourceID string,
 }
 
 var tmpl *template.Template = template.Must(template.New("hybrid-search").Parse(`
-WITH {{ range $index, $value := .Sources -}}
+WITH {{ range $index, $value := .VecSources -}}
 	vec_subquery_{{ $value }} AS (
 		SELECT
 			vec_chunks.page AS page,
@@ -434,7 +436,7 @@ WITH {{ range $index, $value := .Sources -}}
 	JOIN pages ON pages.id = pages_fts.rowid
 	WHERE
 		pages.source IN (
-			{{- range $index, $value := .Sources -}}
+			{{- range $index, $value := .FTSSources -}}
 				{{- if gt $index 0 }}, {{ end -}}
 				?
 			{{- end -}}
@@ -450,27 +452,32 @@ SELECT
 	pages.url,
 	coalesce(fts_ordered.title, pages.title) AS title,
 	coalesce(fts_ordered.description, pages.description) AS description,
-	coalesce(fts_ordered.content
-		{{- range $index, $value := .Sources -}}
+	coalesce(fts_ordered.content, NULL
+		{{- range $index, $value := .VecSources -}}
 			, vec_subquery_{{ $value }}.chunk
 		{{- end -}}
 	) AS content,
-	{{ if eq (len .Sources) 1 -}}
-		vec_subquery_{{ index .Sources 0 }}.distance AS vec_distance,
+
+	{{ if eq (len .VecSources) 0 -}}
+	 NULL AS vec_distance,
+	{{- else if eq (len .VecSources) 1 -}}
+		vec_subquery_{{ index .VecSources 0 }}.distance AS vec_distance,
 	{{ else -}}
 		coalesce(
-			{{- range $index, $value := .Sources -}}
+			{{- range $index, $value := .VecSources -}}
 				{{- if gt $index 0 }}, {{ end -}}
 				vec_subquery_{{ $value }}.distance
 			{{- end -}}
 		) AS vec_distance,
 	{{ end -}}
 
-	{{ if eq (len .Sources) 1 -}}
-		vec_subquery_{{ index .Sources 0 }}.rank_number AS vec_rank,
+	{{ if eq (len .VecSources) 0 -}}
+	 NULL AS vec_rank,
+	{{- else if eq (len .VecSources) 1 -}}
+		vec_subquery_{{ index .VecSources 0 }}.rank_number AS vec_rank,
 	{{- else -}}
 		coalesce(
-			{{- range $index, $value := .Sources -}}
+			{{- range $index, $value := .VecSources -}}
 				{{- if gt $index 0 }}, {{ end -}}
 				vec_subquery_{{ $value }}.rank_number
 			{{- end -}}
@@ -479,17 +486,17 @@ SELECT
 
 	fts_ordered.rank_number AS fts_rank,
 	(
-		{{ range $index, $value := .Sources -}}
+		{{ range $index, $value := .VecSources -}}
 			coalesce(1.0 / (60 + vec_subquery_{{ $value }}.rank_number) * 0.5, 0.0) +
 		{{ end -}}
 	coalesce(1.0 / (60 + fts_ordered.rank_number), 0.0)
 	) AS combined_rank
 FROM fts_ordered
-{{ range $index, $value := .Sources -}}
+{{ range $index, $value := .VecSources -}}
 	FULL OUTER JOIN vec_subquery_{{ $value }} USING (page)
 {{ end -}}
 JOIN pages ON pages.id = coalesce(
-	fts_ordered.page {{- range $index, $value := .Sources -}}
+	fts_ordered.page {{- range $index, $value := .VecSources -}}
 		, vec_subquery_{{ $value }}.page
 	{{- end }}
 )
@@ -510,11 +517,16 @@ func (db *SQLiteDatabase) HybridSearch(ctx context.Context, sources []string, qu
 	}
 
 	type TemplateData struct {
-		Sources []string
+		// The sources to use in the full-text search
+		FTSSources []string
+		// The sources to use in the vector search
+		VecSources []string
 	}
 
 	var query bytes.Buffer
-	err := tmpl.Execute(&query, TemplateData{Sources: sources})
+
+	// FTSSources and VecSources are separated to allow combining searches from sources that do and don't contain vector indexes
+	err := tmpl.Execute(&query, TemplateData{FTSSources: sources, VecSources: slices.Collect(maps.Keys(embeddedQueries))})
 	if err != nil {
 		return nil, fmt.Errorf("error formatting query: %v", err)
 	}
@@ -523,7 +535,9 @@ func (db *SQLiteDatabase) HybridSearch(ctx context.Context, sources []string, qu
 
 	// Vector query args
 	for _, src := range sources {
-		args = append(args, serializedQueries[src], limit)
+		if serializedQueries[src] != nil {
+			args = append(args, serializedQueries[src], limit)
+		}
 	}
 
 	// FTS query args
