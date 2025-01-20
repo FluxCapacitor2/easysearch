@@ -78,7 +78,7 @@ func (db *SQLiteDatabase) AddDocument(ctx context.Context, source string, depth 
 			// Pages don't need to reference themselves
 			continue
 		}
-		_, err = tx.ExecContext(ctx, "INSERT INTO pages_referrers (source, dest) VALUES (?, ?);", ref, id)
+		_, err = tx.ExecContext(ctx, "INSERT OR IGNORE INTO pages_referrers (source, dest) VALUES (?, ?);", ref, id)
 		if err != nil {
 			if err := tx.Rollback(); err != nil {
 				return id, err
@@ -99,7 +99,7 @@ func (db *SQLiteDatabase) AddDocument(ctx context.Context, source string, depth 
 }
 
 func (db *SQLiteDatabase) AddReferrer(ctx context.Context, source int64, dest int64) error {
-	_, err := db.conn.ExecContext(ctx, "INSERT INTO pages_referrers (source, dest) VALUES (?, ?) ON CONFLICT DO NOTHING;", source, dest)
+	_, err := db.conn.ExecContext(ctx, "INSERT OR IGNORE INTO pages_referrers (source, dest) VALUES (?, ?) ON CONFLICT DO NOTHING;", source, dest)
 	return err
 }
 
