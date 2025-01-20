@@ -495,11 +495,16 @@ FROM fts_ordered
 {{ range $index, $value := .VecSources -}}
 	FULL OUTER JOIN vec_subquery_{{ $value }} USING (page)
 {{ end -}}
-JOIN pages ON pages.id = coalesce(
-	fts_ordered.page {{- range $index, $value := .VecSources -}}
-		, vec_subquery_{{ $value }}.page
-	{{- end }}
-)
+
+JOIN pages ON pages.id = {{ if eq (len .VecSources) 0 -}}
+	fts_ordered.page
+{{- else -}}
+	coalesce(
+		fts_ordered.page {{- range $index, $value := .VecSources -}}
+			, vec_subquery_{{ $value }}.page
+		{{- end -}}
+	)
+{{ end }}
 ORDER BY combined_rank DESC;
 `))
 
