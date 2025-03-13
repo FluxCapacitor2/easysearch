@@ -1,7 +1,8 @@
 module github.com/fluxcapacitor2/easysearch
 
-go 1.23
-toolchain go1.23.2
+go 1.23.0
+
+toolchain go1.23.5
 
 require (
 	github.com/PuerkitoBio/goquery v1.10.0
