@@ -183,6 +183,10 @@ func Crawl(ctx context.Context, source config.Source, currentDepth int32, referr
 	})
 
 	collector.OnHTML("a[href]", func(element *colly.HTMLElement) {
+		rel := element.Attr("rel")
+		if strings.Contains(rel, "nofollow") {
+			return
+		}
 		href := element.Request.AbsoluteURL(element.Attr("href"))
 		add(href)
 	})
